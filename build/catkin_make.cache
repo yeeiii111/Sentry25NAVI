@@ -1,0 +1,2 @@
+Matching:Point-LIO-master:livox_laser_simulation:livox_ros_driver2-master:navigation:sentry_simulation
+-DCATKIN_WHITELIST_PACKAGES=navigation -DCATKIN_DEVEL_PREFIX=/home/wqx/RM/ForExperiment/devel -DCMAKE_INSTALL_PREFIX=/home/wqx/RM/ForExperiment/install -G Unix Makefiles

@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<launch>
+    <node name="controller" pkg="navigation" type="controller">
+        <param name="global_frame" value="map"/>
+        <param name="plan_frequency" value="50"/>
+        <param name="set_yaw_speed" value="2"/>
+        <param name="goal_dist_tolerance" value="0.25"/>
+        <param name="prune_ahead_distance" value="0.6"/>
+        <param name="p_value" value="1.5"/>
+    </node>
+</launch>

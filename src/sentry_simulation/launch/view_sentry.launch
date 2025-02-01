@@ -1,0 +1,92 @@
+<launch>
+
+    <!-- node vehicle_simulator -->
+    <arg name="use_gazebo_time" default="true" />
+    <arg name="vehicle_height" default="0.5" />
+    <arg name="vehicle_x" default="0" />
+    <arg name="vehicle_y" default="0" />
+    <arg name="vehicle_z" default="0" />
+    <arg name="vehicle_yaw" default="0" />
+    <arg name="terrian_z" default="0" />
+    <arg name="terrian_VoxelSize" default="0.05" />
+    <arg name="max_groundHeight" default="0.1" />
+    <arg name="adjustZ" default="false" />
+    <arg name="terrian_radiusZ" default="1.0" />
+    <arg name="minTerrianNumZ" default="5" />
+    <arg name="smoothRateZ" default="0.5" />
+    <arg name="adjustIncl" default="false" />
+    <arg name="terrian_RadiusIncl" default="2.0" />
+    <arg name="minTerrianNumIncl" default="200" />
+    <arg name="smoothRateIncl" default="0.5" />
+    <arg name="InclFittingThreshold" default="0.2" />
+    <arg name="maxIncl" default="30.0" />
+    
+    <!-- gazebo -->
+    <arg name="paused" default="false"/>
+    <arg name="use_sim_time" default="true"/>
+    <arg name="gui" default="true"/>
+    <arg name="headless" default="false"/>
+    <arg name="debug" default="false"/>
+    <arg name="verbose" default="true"/>
+    <arg name="origin_x" default="10" />
+    <arg name="origin_y" default="0" />
+    <arg name="origin_z" default="0" />
+    <arg name="origin_x_1" default="6" />
+    <arg name="origin_y_1" default="3" />
+    <arg name="origin_z_1" default="0" />
+    <arg name="origin_roll" default="0.000001" />
+    <arg name="origin_pitch" default="0.000001" />
+    <arg name="origin_yaw" default="1.577204" />
+
+    <!-- 加载机器人模型参数 -->
+    <param name="robot_description" command="$(find xacro)/xacro  $(find sentry_simulation)/urdf/sentry.urdf.xacro" />
+    <param name="obstacle_description" command="$(find xacro)/xacro  $(find sentry_simulation)/urdf/obstacle.urdf.xacro" />
+
+    <node pkg="gazebo_ros" type="spawn_model" name="sentry" args="-urdf -param /robot_description -model robot1 
+          -x $(arg origin_x) -y $(arg origin_y) -z $(arg origin_z) -R $(arg origin_roll) -P $(arg origin_pitch) -Y $(arg origin_yaw)"/>
+
+    <!-- <node pkg="gazebo_ros" type="spawn_model" name="obstacle" args="-urdf -param /obstacle_description -model robot2 
+          -x $(arg origin_x_1) -y $(arg origin_y_1) -z $(arg origin_z_1) -R $(arg origin_roll) -P $(arg origin_pitch) -Y $(arg origin_yaw)"/> -->
+
+    <env name="GAZEBO_MODEL_PATH" value="${GAZEBO_MODEL_PATH}:$(find sentry_simulation)/mesh" />
+    <env name="GAZEBO_RESOURCE_PATH" value="${GAZEBO_RESOURCE_PATH}:$(find sentry_simulation)/mesh" />
+
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="gui" value="$(arg gui)" />
+        <arg name="debug" value="$(arg debug)" />
+        <arg name="paused" value="$(arg paused)" />
+        <arg name="verbose" value="$(arg verbose)"/>
+        <arg name="headless" value="$(arg headless)"/>
+        <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+        <arg name="world_name" value="$(find sentry_simulation)/world/RMUC2024.world" />
+    </include>
+      
+    <node pkg="joint_state_publisher" type="joint_state_publisher" name="sentry_joint_publisher" output="screen" />    
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="sentry_tf_publisher" output="screen" />
+
+    <node pkg="sentry_simulation" type="key_control" name="key_control" output="screen" />
+    <node pkg = "rviz" type = "rviz" name = "rivz"/>
+
+<!-- 
+    <node pkg="sentry_simulation" type="vehicle_simulator" name="vehicle_simulator" output="screen">
+        <param name="use_gazebo_time" value="${arg use_gazebo_time}" />
+        <param name="vehicle_height" value="${arg vehicle_height}" />
+        <param name="vehicle_x" value="${arg vehicle_x}" />
+        <param name="vehicle_y" value="${arg vehicle_y}" />
+        <param name="vehicle_z" value="${arg vehicle_z}" />
+        <param name="vehicle_yaw" value="${arg vehicle_yaw}" />
+        <param name="terrian_z" value="${arg terrian_z}" />
+        <param name="terrian_VoxelSize" value="${arg terrianVoxelSize}" />
+        <param name="max_groundHeight" value="${arg max_groundHeight}" />
+        <param name="adjustZ" value="${arg adjustZ}" />
+        <param name="terrian_radiusZ" value="${arg terrian_radiusZ}" />
+        <param name="minTerrianNumZ" value="${arg minTerrianNumZ}" />
+        <param name="smoothRateZ" value="${arg smoothRateZ}" />
+        <param name="adjustIncl" value="${arg adjustIncl}" />
+        <param name="terrian_RadiusIncl" value="${arg terrian_RadiusIncl}" />
+        <param name="minTerrianNumIncl" value="${arg minTerrianNumIncl}" />
+        <param name="smoothRateIncl" value="${arg smoothRateIncl}" />
+        <param name="InclFittingThreshold" value="${arg InclFittingThreshold}" />
+        <param name="maxIncl" value="${arg maxIncl}" />
+    </node> -->
+</launch>
