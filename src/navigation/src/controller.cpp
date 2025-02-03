@@ -5,6 +5,7 @@ Controller::Controller()
     ros::NodeHandle nh("~");
     nh.param<double>("max_speed", max_speed, 1.0);
     nh.param<double>("p_value", p_value, 0.5);
+    
     nh.param<double>("set_yaw_speed", set_yaw_speed, 0);
     nh.param<int>("plan_frequency", plan_freq, 30);
     nh.param<double>("goal_dist_tolerance", goal_dist_tolerance, 0.2);
