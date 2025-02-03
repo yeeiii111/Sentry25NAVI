@@ -1,0 +1,4 @@
+# 忽略由 catkin_make 生成的文件夹
+build/
+devel/
+*.pcd
