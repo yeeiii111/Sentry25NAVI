@@ -1,8 +1,0 @@
-prefix=/home/wqx/RM/ForExperiment/devel
-
-Name: sentry_simulation
-Description: Description of sentry_simulation
-Version: 0.0.1
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: roscpp std_msgs sensor_msgs pcl_ros

@@ -1,8 +1,0 @@
-prefix=/home/wqx/RM/ForExperiment/devel
-
-Name: livox_laser_simulation
-Description: Description of livox_laser_simulation
-Version: 0.0.0
-Cflags: -I/home/wqx/RM/ForExperiment/devel/include -I/home/wqx/RM/ForExperiment/src/livox_laser_simulation/include
-Libs: -L${prefix}/lib -llivox_laser_simulation
-Requires: tf
