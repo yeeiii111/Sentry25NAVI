@@ -1,0 +1,9 @@
+<launch>
+    <node pkg="segmentation" type="segmentation" name="detector">
+    <rosparam command="load" file="$(find segmentation)/config/extrinsic.yaml" />
+    <param name="map_path" type="string" value="/home/wqx/RM/ForExperiment/src/Point-LIO-master/PCD/RMUC2025_X-10.pcd"/> 
+    <param name="freq" type="int" value="10"/> 
+    <param name="distance_threshold" type="double" value="0.3"/> 
+    <param name="/use_sim_time" value="flase" />
+    </node>
+</launch>

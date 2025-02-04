@@ -9,5 +9,14 @@ global_costmap:
   transform_tolerance: 0.5
   plugins:
     - {name: static_layer, type: "costmap_2d::StaticLayer"}
-    - {name: obstacle_layer, type: "costmap_2d::ObstacleLayer"}
+    - {name: obstacle_layer, type: "costmap_2d::VoxelLayer"}
     - {name: inflation_layer, type: "costmap_2d::InflationLayer"}
+  obstacle_layer:
+    enabled: true  
+    observation_sources: point_cloud_sensor  
+    point_cloud_sensor:
+      sensor_frame: body  
+      data_type: PointCloud2
+      topic: /detector/obstacle  
+      marking: true
+      clearing: false

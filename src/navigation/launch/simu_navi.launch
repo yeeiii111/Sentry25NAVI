@@ -17,9 +17,9 @@
         <rosparam file="$(find navigation)/config/costmap_common_params.yaml" command="load" ns="local_costmap" />
         <rosparam file="$(find navigation)/config/local_costmap_params.yaml" command="load" />
         <rosparam file="$(find navigation)/config/global_costmap_params.yaml" command="load" />
-        
+
         <param name="base_global_planner" value="global_planner/GlobalPlanner" />
-        <!--<param name="neutral_cost" value="220" />-->
+        <param name="neutral_cost" value="220" />
         <param name="planner_frequency" value="3.0" />
         <param name="planner_patience" value="5.0" />
         <param name="use_dijkstra" value="false" />

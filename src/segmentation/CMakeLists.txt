@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   roscpp
   rospy
+  livox_ros_driver2
 )
 find_package(PCL 1.8 )
 ## System dependencies are found with CMake's conventions
