@@ -4,7 +4,7 @@ global_costmap:
   update_frequency: 5.0
   publish_frequency: 2.0
   static_map: true
-  inflation_radius: 1.0
+  inflation_radius: 0.4
   rolling_window: false
   transform_tolerance: 0.5
   plugins:
@@ -13,10 +13,14 @@ global_costmap:
     - {name: inflation_layer, type: "costmap_2d::InflationLayer"}
   obstacle_layer:
     enabled: true  
-    observation_sources: point_cloud_sensor  
+    observation_sources: point_cloud_sensor 
+    obstacle_keep_time: 0.5        # 障碍物保留时间（0.5秒未被检测到则清除）
+    observation_persistence: 0.0   # 仅信任最新传感器数据
+    expected_update_rate: 10.0  
+    max_obstacle_height: 2.0 
     point_cloud_sensor:
       sensor_frame: body  
       data_type: PointCloud2
       topic: /detector/obstacle  
       marking: true
-      clearing: false
+      clearing: true

@@ -66,14 +66,14 @@
         <visual>
             <origin xyz="0 0 0.05" rpy="0 0 0"/>
             <geometry>
-                <box size="0.2 0.3 0.8"/>
+                <box size="0.5 0.5 0.4"/>
             </geometry>
             <material name="White" />
         </visual>
         <collision>
             <origin xyz="0 0 0.05" rpy="0 0 0"/>
             <geometry>
-                <box size="0.3 0.2 0.15"/>
+                <box size="0.5 0.5 0.4"/>
             </geometry>
         </collision>
         <xacro:inertial_matrix mass="25" />
@@ -204,14 +204,14 @@
     <xacro:gazebo_material ref="obstacle_right_rear_wheel"  color="Red" />   
 
     <!-- //// ////////////////////////////// driver controller //////////////////////////////////  -->
-    <!-- <gazebo>
+    <gazebo>
         <plugin name="mecanum_controller" filename="libgazebo_ros_planar_move.so">
             <always_on>true</always_on>
             <updateRate>100.0</updateRate>
             <robotNamespace>/</robotNamespace>
-            <commandTopic>cmd_vel</commandTopic>
-            <odometryTopic>odom</odometryTopic>
-            <odometryFrame>odom</odometryFrame>
+            <commandTopic>obstacle/cmd_vel</commandTopic>
+            <odometryTopic>obstacle/odom</odometryTopic>
+            <odometryFrame>obstacle/odom</odometryFrame>
             <leftFrontJoint>obstacle_base_to_wheel1</leftFrontJoint>
             <rightFrontJoint>obstacle_base_to_wheel3</rightFrontJoint>
             <leftRearJoint>obstacle_base_to_wheel2</leftRearJoint>
@@ -225,6 +225,6 @@
             <broadcastTF>true</broadcastTF>
             <cmdTimeout>1.0</cmdTimeout>
         </plugin>
-    </gazebo> -->
+    </gazebo>
 
 </robot>

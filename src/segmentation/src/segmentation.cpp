@@ -4,6 +4,7 @@
 
 Obstacle_detector::Obstacle_detector():
     prior_map(new pcl::PointCloud<pcl::PointXYZ>),
+    filtered_prior_map(new pcl::PointCloud<pcl::PointXYZ>),
     obstacle(new pcl::PointCloud<pcl::PointXYZ>),
     scan_sensor(new pcl::PointCloud<pcl::PointXYZ>),
     scan_map(new pcl::PointCloud<pcl::PointXYZ>){
@@ -13,6 +14,8 @@ Obstacle_detector::Obstacle_detector():
     nh.param<int>("freq", freq, 10);
     nh.param<std::vector<double>>("extrinsic_T", extrinT, std::vector<double>());
     nh.param<std::vector<double>>("extrinsic_R", extrinR, std::vector<double>());
+    nh.param<double>("leaf_size", leaf_size, 0.05);
+    nh.param<bool>("prior_map_pub_en", prior_map_pub_en, 0);
     Eigen::Vector3d translation(extrinT.data());
     Eigen::Matrix3d rotation;
     rotation << extrinR[0],extrinR[1],extrinR[2],
@@ -24,6 +27,7 @@ Obstacle_detector::Obstacle_detector():
 
     scan_sub = nh.subscribe("/livox/lidar",5,&Obstacle_detector::Scan_Callback,this);
     obstacle_pub = nh.advertise<sensor_msgs::PointCloud2>("obstacle",10);
+    prior_map_pub = nh.advertise<sensor_msgs::PointCloud2>("prior_map",10);
     tf_listener = std::make_shared<tf::TransformListener>();
     run_timer = nh.createTimer(ros::Duration(1.0/freq),&Obstacle_detector::timer,this);
     if(pcl::io::loadPCDFile<pcl::PointXYZ>(map_path,*prior_map) == -1)
@@ -31,7 +35,13 @@ Obstacle_detector::Obstacle_detector():
         ROS_ERROR("Load PCD file failed");
         ros::shutdown();
     }
-    kdtree.setInputCloud(prior_map);
+    //方便KDtree有序存储
+    pcl::VoxelGrid<pcl::PointXYZ> downsample;
+    downsample.setInputCloud(prior_map);
+    downsample.setLeafSize(leaf_size,leaf_size,leaf_size);
+    downsample.filter(*filtered_prior_map);
+    kdtree.setInputCloud(filtered_prior_map);
+
 }
 void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_map){
     for (const auto& pt : scan_map->points){
@@ -49,7 +59,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
 
     obstacle->clear();
     geometry_msgs::PoseStamped robot_pose;
-    GetTargetRobotPose(tf_listener,"map",robot_pose);
+    GetTargetRobotPose(tf_listener,"map",robot_pose,last_scan_timestamp);
 
     Eigen::Vector3d position(robot_pose.pose.position.x,
                          robot_pose.pose.position.y,
@@ -77,11 +87,20 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
         obstacle_ros.header.stamp = ros::Time::now();
         obstacle_pub.publish(obstacle_ros);
     }        
+    if(prior_map_pub_en)
+    {
+        sensor_msgs::PointCloud2 prior_map_ros;
+        pcl::toROSMsg(*filtered_prior_map,prior_map_ros);
+        prior_map_ros.header.frame_id = "map";
+        prior_map_pub.publish(prior_map_ros);
+    }
 }
 
 void Obstacle_detector::Scan_Callback(const livox_ros_driver2::CustomMsg::ConstPtr &msg){
     std::lock_guard<std::mutex> lock(scan_mutex);
     livox_msg_handler(msg , scan_sensor);//自动覆盖scan_sensor
+    last_scan_timestamp = scan_timestamp;  
+    scan_timestamp = msg->header.stamp;
 }
     
 int main(int argc, char **argv)

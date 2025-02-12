@@ -2,6 +2,7 @@
 #define ROBOMASTER_UTILITY_H
 #include <tf/tf.h>
 #include <tf/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Quaternion.h>
@@ -16,14 +17,16 @@ double GetEuclideanDistance(const geometry_msgs::PoseStamped & pose_1,
 
 bool GetTargetRobotPose(const std::shared_ptr<tf::TransformListener>& tf_listener,
                         const std::string& target_frame,
-                        geometry_msgs::PoseStamped& robot_target_pose){
+                        geometry_msgs::PoseStamped& robot_target_pose,
+                        ros::Time& timestamp){
   tf::Stamped<tf::Pose> robot_pose_tf;
   robot_pose_tf.setIdentity();
   robot_pose_tf.frame_id_ = "base_link";
-  robot_pose_tf.stamp_ = ros::Time::now() - ros::Duration(0.1);
+  robot_pose_tf.stamp_ = timestamp;
 
   tf::Stamped<tf::Pose> robot_target_pose_tf;
   try{
+    tf_listener->waitForTransform("map", "base_link", timestamp, ros::Duration(0.2));
     tf_listener->transformPose( target_frame, robot_pose_tf, robot_target_pose_tf);
   }
   catch (tf::TransformException &ex) {

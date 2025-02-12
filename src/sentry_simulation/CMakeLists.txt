@@ -9,6 +9,7 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  rospy
   std_msgs
   sensor_msgs
   pcl_ros
@@ -24,6 +25,7 @@ find_package(PCL REQUIRED)
 catkin_package(
   CATKIN_DEPENDS
   roscpp
+  rospy
   std_msgs
   sensor_msgs
   pcl_ros
@@ -84,4 +86,10 @@ install(DIRECTORY urdf/
 )
 install(DIRECTORY world/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/world
+)
+
+set(PYTHON_EXECUTABLE /usr/bin/python3)
+catkin_install_python(PROGRAMS
+  src/auto_obstacle.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
