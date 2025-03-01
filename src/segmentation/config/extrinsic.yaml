@@ -2,3 +2,7 @@ extrinsic_T: [ 0.0, 0.0, 0.36 ]
 extrinsic_R: [  1, 0, 0,
                 0, 1, 0,
                 0, 0, 1 ]
+IMU_extrinsic_T: [ 0.0, 0.0, 0.25 ]
+IMU_extrinsic_R: [  1, 0, 0,
+                    0, 1, 0,
+                    0, 0, 1 ]

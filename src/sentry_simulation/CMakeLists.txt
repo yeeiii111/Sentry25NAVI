@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   sensor_msgs
   pcl_ros
+  livox_ros_driver2
 )
 
 find_package(OpenCV REQUIRED)
@@ -38,6 +39,7 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
+  include
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
@@ -56,11 +58,12 @@ link_directories(
 ## Declare executables
 add_executable(vehicle_simulator ${PROJECT_SOURCE_DIR}/src/vehicle_simulator.cpp)
 add_executable(key_control ${PROJECT_SOURCE_DIR}/src/key_control.cpp)
-
+add_executable(livox2rosmsg ${PROJECT_SOURCE_DIR}/src/livox2rosmsg.cpp)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(vehicle_simulator ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${PCL_LIBRARIES})
 target_link_libraries(key_control ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(livox2rosmsg ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${PCL_LIBRARIES})
 
 install(TARGETS vehicle_simulator
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

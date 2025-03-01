@@ -7,17 +7,19 @@
             },
             "includePath": [
                 "/home/wqx/RM/ForExperiment/devel/include/**",
-                "/home/wqx/RM/ForExperiment/src/Matching/include/**",
                 "/home/wqx/RM/ForExperiment/src/livox_laser_simulation/include/**",
                 "/home/wqx/RM/ForExperiment/src/navigation/include/**",
                 "/home/wqx/RM/ForExperiment/src/Point-LIO-master/include/**",
-                "/home/wqx/RM/ForExperiment/src/sentry_simulation/include/**"
+                "/home/wqx/RM/ForExperiment/src/sentry_simulation/include/**",
+                "/home/wqx/RM/ForExperiment/src/relocalization/include/**"  
+
+
             ],
             "name": "ROS",
             "intelliSenseMode": "gcc-x64",
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "gnu11",
-            "cppStandard": "c++14"
+            "cppStandard": "c++17"
         }
     ],
     "version": 4

@@ -1,8 +1,0 @@
-<launch>
-
-	<node pkg="Matching" type="matching" name="pointmatching" output="screen">
-        <param name="lid_topic" type="string" value="/livox/lidar"/>
-        <param name="frame_num" type="int" value="10"/>
-        <param name="map_path" type="string" value="/home/wqx/RM/ForExperiment/src/Point-LIO-master/PCD/scans.pcd"/>
-    </node>
-</launch>

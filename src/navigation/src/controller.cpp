@@ -18,7 +18,8 @@ Controller::Controller()
 
     tf_listener = std::make_shared<tf::TransformListener>();
     plan_timer = nh.createTimer(ros::Duration(1.0/plan_freq),&Controller::Plan,this);
-
+    std::cout << "max_speed ="<< max_speed << std::endl;
+    prune_index = 0;
 }
 
 void Controller::Plan(const ros::TimerEvent& event){
@@ -36,6 +37,7 @@ void Controller::Plan(const ros::TimerEvent& event){
             cmd_vel.angular.z = 0;
             cmd_vel_pub.publish(cmd_vel);
             ROS_INFO("Planning Success!");
+            prune_index = 0;
             return;
         }
 
@@ -74,7 +76,7 @@ void Controller::Plan(const ros::TimerEvent& event){
 void Controller::GlobalPathCallback(const nav_msgs::PathConstPtr & msg){
   if (!msg->poses.empty()){
       global_path = *msg;
-      prune_index = 0;
+    //   prune_index = 0;
       plan = true;
   }
 }
@@ -113,7 +115,7 @@ void Controller::FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs:
             }
 
             prune_index = std::min(prune_index, (int)(path.poses.size()-1));
-
+            std::cout << "prune_index = " << prune_index << std::endl;
         }
 void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
                             const nav_msgs::Path& traj,
@@ -138,8 +140,8 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
         printf("diff_yaw: %f\n",diff_yaw);
         printf("diff_distance: %f\n",diff_distance);
 
-        double vx_global = max_speed*cos(diff_yaw)*p_value;//*diff_distance*p_value_;
-        double vy_global = max_speed*sin(diff_yaw)*p_value;//*diff_distance*p_value_;
+        double vx_global = max_speed*cos(diff_yaw)*diff_distance*p_value;//*diff_distance*p_value_;
+        double vy_global = max_speed*sin(diff_yaw)*diff_distance*p_value;//*diff_distance*p_value_;
         std::cout<<"yaw_"<<yaw<<std::endl;
         std::cout<<"vx_gl  "<<vx_global<<"   vy_gl   "<<vy_global<<std::endl;
         

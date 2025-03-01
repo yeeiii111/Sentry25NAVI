@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<launch>
+    <node name="relocalization" pkg="relocalization" type="relocalization" output="screen">
+        <param name="pcd_path" value="/home/wqx/RM/ForExperiment/src/Point-LIO-master/PCD/scan_map_clean.pcd"/>
+        <param name="leaf_size" value="0.25"/>
+        <param name="map_leaf_size" value="0.25"/>
+        <param name="max_dist_sq" value="1.0"/>
+        <param name="num_threads" value="4"/>
+        <param name="num_neighbors" value="2.0"/>
+    </node>
+</launch>

@@ -8,14 +8,14 @@
     <arg name="debug" default="false"/>
     <arg name="verbose" default="true"/>
     <arg name="origin_x" default="10" />
-    <arg name="origin_y" default="0" />
+    <arg name="origin_y" default="1" />
     <arg name="origin_z" default="0" />
     <arg name="origin_x_1" default="7" />
     <arg name="origin_y_1" default="2.5" />
     <arg name="origin_z_1" default="0" />
     <arg name="origin_roll" default="0.000000" />
     <arg name="origin_pitch" default="0.000000" />
-    <arg name="origin_yaw" default="1.577204" />
+    <arg name="origin_yaw" default="1.57" />
 
     <param name="robot_description" command="$(find xacro)/xacro $(find sentry_simulation)/urdf/sentry.urdf.xacro"/>
     
@@ -47,4 +47,5 @@
 
     <node name="auto_obstacle" pkg="sentry_simulation" type="auto_obstacle.py" output="screen"/>
         <param name="namespace" value="obstacle"/>
+    <node pkg="sentry_simulation" name="livox2rosmsg" type="livox2rosmsg" output="screen"/>
 </launch>

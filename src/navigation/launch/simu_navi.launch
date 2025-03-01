@@ -5,7 +5,7 @@
         <param name="frame_id" value="map" />
     </node>
 
-    <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 -1.5708 0 0 map odom 0.1" />
+    <!-- <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 -1.5708 0 0 map odom 0.1" /> -->
     <node pkg="tf" type="static_transform_publisher" name="odom2camera_init" args="0 0 0 0 0 0 odom camera_init 0.1" />
     <node pkg="tf" type="static_transform_publisher" name="baselink2body" args="0 0 0 0 0 0 body base_link 0.1" />
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find navigation)/config/rivz/simu.rviz"/>

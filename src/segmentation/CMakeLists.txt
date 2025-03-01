@@ -3,17 +3,22 @@ project(segmentation)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
-
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
+list(INSERT CMAKE_PREFIX_PATH 0 "/usr")
+set(PCL_DIR "/usr/lib/x86_64-linux-gnu/cmake/pcl")
 find_package(catkin REQUIRED COMPONENTS
   tf
   roscpp
   rospy
   livox_ros_driver2
 )
-find_package(PCL 1.8 )
+
+find_package(PCL 1.10 REQUIRED COMPONENTS common kdtree io filters )
+find_package(OpenMP REQUIRED)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -149,9 +154,11 @@ add_executable(segmentation src/segmentation.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(segmentation
+target_link_libraries(segmentation 
+  PUBLIC OpenMP::OpenMP_CXX
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+ 
 )
 
 #############

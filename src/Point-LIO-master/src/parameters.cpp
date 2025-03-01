@@ -5,7 +5,7 @@ double lidar_end_time = 0.0, first_lidar_time = 0.0, time_con = 0.0;
 double last_timestamp_lidar = -1.0, last_timestamp_imu = -1.0;
 int pcd_index = 0;
 
-std::string lid_topic, imu_topic;
+std::string lid_topic, imu_topic, map_path;
 bool prop_at_freq_of_imu, check_satu, con_frame, cut_frame;
 bool use_imu_as_input, space_down_sample, publish_odometry_without_downsample;
 int  init_map_size, con_frame_num;
@@ -32,6 +32,7 @@ double time_lag_imu_to_lidar = 0.0;
 void readParameters(ros::NodeHandle &nh)
 {
   p_pre.reset(new Preprocess());
+  nh.param<std::string>("map_path", map_path, "/home/wqx/RM/ForExperiment/src/Point-LIO-master/PCD/RMUC2025_X+10.pcd");
   nh.param<bool>("prop_at_freq_of_imu", prop_at_freq_of_imu, 1);
   nh.param<bool>("use_imu_as_input", use_imu_as_input, 1);
   nh.param<bool>("check_satu", check_satu, 1);

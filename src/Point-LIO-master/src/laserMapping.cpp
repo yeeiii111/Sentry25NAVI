@@ -63,6 +63,7 @@ deque<sensor_msgs::Imu::ConstPtr> imu_deque;
 PointCloudXYZI::Ptr feats_undistort(new PointCloudXYZI());
 PointCloudXYZI::Ptr feats_down_body_space(new PointCloudXYZI());
 PointCloudXYZI::Ptr init_feats_world(new PointCloudXYZI());
+PointCloudXYZI::Ptr Map_Cloud(new PointCloudXYZI());
 
 pcl::VoxelGrid<PointType> downSizeFilterSurf;
 pcl::VoxelGrid<PointType> downSizeFilterMap;
@@ -622,7 +623,7 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFullRes)
         if (pcl_wait_save->size() > 0 && pcd_save_interval > 0  && scan_wait_num >= pcd_save_interval)
         {
             pcd_index ++;
-            string all_points_dir(string(string(ROOT_DIR) + "PCD/scans_") + to_string(pcd_index) + string(".pcd"));
+            string all_points_dir(string(string(ROOT_DIR) + "PCD/scan_map") + to_string(pcd_index) + string(".pcd"));
             pcl::PCDWriter pcd_writer;
             cout << "current scan saved to /PCD/" << all_points_dir << endl;
             pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
@@ -956,6 +957,16 @@ int main(int argc, char** argv)
                 init_map = true;
                 publish_init_kdtree(pubLaserCloudMap); //(pubLaserCloudFullRes);
                 continue;
+/*---------------------------------------------modified---------------------------------------------------------*/
+                // if(pcl::io::loadPCDFile<PointType>(map_path,*Map_Cloud) == -1)
+                // {
+                //     ROS_ERROR("Load PCD file failed");
+                //     return (-1);
+                // }
+                // ikdtree.Build(Map_Cloud->points); 
+                // ROS_INFO("Map_loaded");
+                // init_map = true;
+                // continue;
             }        
             /*** ICP and Kalman filter update ***/
             normvec->resize(feats_down_size);
