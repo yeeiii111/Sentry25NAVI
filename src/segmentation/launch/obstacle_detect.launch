@@ -8,5 +8,6 @@
     <param name="/use_sim_time" value="flase" />
     <param name="prior_map_pub_en" type="bool" value="true"/>
     <param name="use_livox_cloud" type="bool" value="false"/>
+    <param name="diverge_threshold" type="double" value="0.3"/>
     </node>
 </launch>

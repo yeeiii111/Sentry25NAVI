@@ -14,6 +14,7 @@ Controller::Controller()
     
     local_path_pub = nh.advertise<nav_msgs::Path>("local_path",5);
     global_path_sub = nh.subscribe("/move_base/GlobalPlanner/plan",5,&Controller::GlobalPathCallback,this);
+    act_command_sub = nh.subscribe("/diverge",5,&Controller::LocalizationStatusCallback,this);
     cmd_vel_pub = nh.advertise<geometry_msgs::Twist>("/cmd_vel",10);
 
     tf_listener = std::make_shared<tf::TransformListener>();
@@ -76,9 +77,15 @@ void Controller::Plan(const ros::TimerEvent& event){
 void Controller::GlobalPathCallback(const nav_msgs::PathConstPtr & msg){
   if (!msg->poses.empty()){
       global_path = *msg;
-    //   prune_index = 0;
+    if(diverge == false)
       plan = true;
   }
+}
+void Controller::LocalizationStatusCallback(const std_msgs::BoolConstPtr &msg){
+    if(msg->data == 1){
+        diverge = true;
+        plan = false;
+    }
 }
 
 void Controller::FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs::Path& path, int& prune_index, double prune_ahead_dist){
@@ -140,8 +147,13 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
         printf("diff_yaw: %f\n",diff_yaw);
         printf("diff_distance: %f\n",diff_distance);
 
-        double vx_global = max_speed*cos(diff_yaw)*diff_distance*p_value;//*diff_distance*p_value_;
-        double vy_global = max_speed*sin(diff_yaw)*diff_distance*p_value;//*diff_distance*p_value_;
+        double vx_global = cos(diff_yaw)*diff_distance*p_value;//*diff_distance*p_value_;
+        double vy_global = sin(diff_yaw)*diff_distance*p_value;//*diff_distance*p_value_;
+        if(sqrt(vx_global)+sqrt(vy_global)>sqrt(max_speed))
+        {
+            vx_global = max_speed *cos(diff_yaw);
+            vy_global = max_speed *sin(diff_yaw);
+        }
         std::cout<<"yaw_"<<yaw<<std::endl;
         std::cout<<"vx_gl  "<<vx_global<<"   vy_gl   "<<vy_global<<std::endl;
         

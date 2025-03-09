@@ -6,7 +6,7 @@
         <param name="set_yaw_speed" value="0"/>
         <param name="goal_dist_tolerance" value="0.25"/>
         <param name="prune_ahead_distance" value="2"/>
-        <param name="p_value" value="5"/>
-        <param name="max_speed" value="1"/>
+        <param name="p_value" value="10"/>
+        <param name="max_speed" value="5"/>
     </node>
 </launch>

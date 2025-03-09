@@ -1,0 +1,7 @@
+<launch>
+    <node pkg="tracking" type="tracking" name="tracking" output="screen">
+    <param name="freq" type="int" value="2"/> 
+    <param name="cloud_name" type="string" value="/detector/obstacle"/>
+    <param name="ClusterTolerance" type="double" value="0.1"/>
+    </node>
+</launch>

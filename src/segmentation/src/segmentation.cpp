@@ -21,6 +21,7 @@ Obstacle_detector::Obstacle_detector():
     nh.param<double>("leaf_size", leaf_size, 0.05);
     nh.param<bool>("prior_map_pub_en", prior_map_pub_en, 0);
     nh.param<bool>("use_livox_cloud",use_livox_cloud, 0);
+    nh.param<double>("diverge_threshold",diverge_threshold,0.5);
     Eigen::Vector3d translation(extrinT.data());
     Eigen::Matrix3d rotation;
     rotation << extrinR[0],extrinR[1],extrinR[2],
@@ -54,7 +55,7 @@ Obstacle_detector::Obstacle_detector():
     else{
         scan_sub = nh.subscribe("/cloud_registered",5,&Obstacle_detector::Standard_Scan_Callback,this);
     }
-
+    diverge_pub = nh.advertise<std_msgs::Bool>("/diverge",10);
     obstacle_pub = nh.advertise<sensor_msgs::PointCloud2>("obstacle",10);
     prior_map_pub = nh.advertise<sensor_msgs::PointCloud2>("prior_map",10);
     tf_listener = std::make_shared<tf::TransformListener>();
@@ -84,10 +85,17 @@ void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_m
                 obstacle->push_back(pt);
             }
         }
-    }
+    }  
+    double per = static_cast<double>(obstacle->size())/scan_map->size();
+    if(per > diverge_threshold)
+        diverge.data = true;
+    else
+        diverge.data = false;
     auto end_time = std::chrono::high_resolution_clock::now();
+
     std::chrono::duration<double, std::milli> duration = end_time - start_time;
-    std::cout << "detect function took " << duration.count() << " milliseconds" << std::endl;      
+    std::cout << "detect function took " << duration.count() << " milliseconds" << std::endl;    
+    std::cout << "obstacle point percentage " << per*100<<"%" <<std::endl;
 }
 void Obstacle_detector::timer(const ros::TimerEvent &event){
 
@@ -130,6 +138,8 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
         obstacle_ros.header.frame_id = "map";
         obstacle_ros.header.stamp = ros::Time::now();
         obstacle_pub.publish(obstacle_ros);
+
+        diverge_pub.publish(diverge);
     }        
     if(prior_map_pub_en)
     {

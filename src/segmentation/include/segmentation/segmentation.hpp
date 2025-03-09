@@ -6,6 +6,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/voxel_grid.h>
 #include <ros/ros.h>
+#include <std_msgs/Bool.h>
 #include <tf2/utils.h>
 #include <tf/tf.h>
 #include <tf/transform_listener.h>
@@ -26,9 +27,12 @@ public:
 private:
     double                                          distance_threshold = 0.2;
     double                                          leaf_size;
+    double                                          diverge_threshold;
+    int                                             min_diverge_num;
     int                                             freq;
     bool                                            prior_map_pub_en;
     bool                                            use_livox_cloud;
+    std_msgs::Bool                                  diverge;
     pcl::KdTreeFLANN<pcl::PointXYZ>                 kdtree;
     std::string                                     map_path;
     ros::Timer                                      run_timer;
@@ -44,6 +48,7 @@ private:
     std::shared_ptr<tf::TransformListener>          tf_listener;
     ros::Publisher                                  obstacle_pub;
     ros::Publisher                                  prior_map_pub;
+    ros::Publisher                                  diverge_pub;
     ros::Subscriber                                 scan_sub;
     std::vector<double>                             extrinT;
     std::vector<double>                             extrinR;

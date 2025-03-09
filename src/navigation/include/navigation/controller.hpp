@@ -20,11 +20,13 @@
 #include "cubic_spline/cubic_spline_ros.h"
 #include <Eigen/Eigen>
 #include <chrono>
+#include <std_msgs/Bool.h>
 class Controller {
 public:
     Controller();
     ~Controller();
     void GlobalPathCallback(const nav_msgs::PathConstPtr & msg);
+    void LocalizationStatusCallback(const std_msgs::BoolConstPtr &msg);
     void FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs::Path& path, int& prune_index, double prune_ahead_dist);
     void FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
                     const nav_msgs::Path& traj,
@@ -33,14 +35,14 @@ public:
 private:
     ros::Publisher cmd_vel_pub;
     ros::Publisher local_path_pub;
-
+    ros::Subscriber act_command_sub;
     ros::Subscriber global_path_sub;
     ros::Timer      plan_timer;
 
     std::shared_ptr<tf::TransformListener> tf_listener;
 
     nav_msgs::Path global_path;
-
+    bool diverge = false;
     bool plan = false;
     int prune_index = 0;
 
@@ -54,7 +56,6 @@ private:
     double prune_ahead_dist;
 
     double yaw;
-
     std::string global_frame;
 
 };   

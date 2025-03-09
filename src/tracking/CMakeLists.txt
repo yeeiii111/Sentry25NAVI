@@ -1,48 +1,23 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(relocalization)
+project(tracking)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
-add_compile_definitions(EIGEN_HAS_CXX17_OVERALIGN=0)
-#add_compile_options(-mavx)
- add_compile_options(-mavx2)
-SET(CMAKE_BUILD_TYPE "Debug")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+list(INSERT CMAKE_PREFIX_PATH 0 "/usr")
+set(PCL_DIR "/usr/lib/x86_64-linux-gnu/cmake/pcl")
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-
-if(POLICY CMP0074)
-  cmake_policy(SET CMP0074 NEW)
-endif()
-
-list(INSERT CMAKE_PREFIX_PATH 0 "/home/wqx/MyLibInstall/pcl-1.11")
-# set(PCL_ROOT "/home/wqx/MyLibInstall")
-# set(PCL_DIR "/home/wqx/MyLibInstall/pcl-1.11/share/pcl-1.11")
-# list(REMOVE_ITEM CMAKE_PREFIX_PATH "/usr")
-# list(REMOVE_ITEM CMAKE_LIBRARY_PATH "/usr/lib/x86_64-linux-gnu")
-message(STATUS "PCL_INCLUDE_DIRS = ${PCL_INCLUDE_DIRS}")
-message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
-message(STATUS "CMAKE_ROOT = ${CMAKE_ROOT}")
-
-find_package(PCL 1.11.0 EXACT COMPONENTS 
-            common kdtree io filters features search sample_consensus octree openmp
-)
-message(STATUS "PCL_INCLUDE_DIRS = ${PCL_INCLUDE_DIRS}")
-find_package(OpenMP REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
-  tf2_ros
+
 )
-message(STATUS "PCL_VERSION = ${PCL_VERSION}")
-message(STATUS "PCL_LIBRARIES = ${PCL_LIBRARIES}")
-message(STATUS "CATKIN_LIBRARIES = ${catkin_LIBRARIES}")
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+find_package(PCL 1.10 REQUIRED)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -132,7 +107,7 @@ message(STATUS "CATKIN_LIBRARIES = ${catkin_LIBRARIES}")
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES relocalization
+#  LIBRARIES tracking
 #  CATKIN_DEPENDS roscpp rospy
 #  DEPENDS system_lib
 )
@@ -143,13 +118,15 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(include
+include_directories(
+  include
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
 )
+
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/relocalization.cpp
+#   src/${PROJECT_NAME}/tracking.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -160,8 +137,7 @@ include_directories(include
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_definitions(${PCL_DEFINITIONS})
-add_executable(relocalization src/relocalization.cpp)
+add_executable(tracking src/tracking.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -174,12 +150,9 @@ add_executable(relocalization src/relocalization.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(${PROJECT_NAME}
-  PUBLIC 
-  ${PCL_LIBRARIES}
-  OpenMP::OpenMP_CXX
+target_link_libraries(tracking
   ${catkin_LIBRARIES}
-  -Wl,-rpath=/home/wqx/MyLibInstall/pcl-1.11/lib
+  ${PCL_LIBRARIES}
 )
 
 #############
@@ -229,7 +202,7 @@ target_link_libraries(${PROJECT_NAME}
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_relocalization.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_tracking.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
