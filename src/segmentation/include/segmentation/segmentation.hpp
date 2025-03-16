@@ -28,10 +28,14 @@ private:
     double                                          distance_threshold = 0.2;
     double                                          leaf_size;
     double                                          diverge_threshold;
+    double                                          lidar_height;
+    double                                          lidar_roll;
     int                                             min_diverge_num;
     int                                             freq;
+    bool                                            use_stl_cloud;
     bool                                            prior_map_pub_en;
     bool                                            use_livox_cloud;
+    bool                                            debug_en;
     std_msgs::Bool                                  diverge;
     pcl::KdTreeFLANN<pcl::PointXYZ>                 kdtree;
     std::string                                     map_path;

@@ -3,33 +3,37 @@ project(relocalization)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
-add_compile_definitions(EIGEN_HAS_CXX17_OVERALIGN=0)
-#add_compile_options(-mavx)
- add_compile_options(-mavx2)
-SET(CMAKE_BUILD_TYPE "Debug")
+
+set(CMAKE_BUILD_TYPE "Debug")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
+unset(PCL_DIR CACHE)
+unset(PCL_ROOT CACHE)
 
-if(POLICY CMP0074)
-  cmake_policy(SET CMP0074 NEW)
-endif()
-
-list(INSERT CMAKE_PREFIX_PATH 0 "/home/wqx/MyLibInstall/pcl-1.11")
-# set(PCL_ROOT "/home/wqx/MyLibInstall")
-# set(PCL_DIR "/home/wqx/MyLibInstall/pcl-1.11/share/pcl-1.11")
-# list(REMOVE_ITEM CMAKE_PREFIX_PATH "/usr")
-# list(REMOVE_ITEM CMAKE_LIBRARY_PATH "/usr/lib/x86_64-linux-gnu")
+list(INSERT CMAKE_PREFIX_PATH 0 "/home/tjurm/MylibInstall/pcl-1.11.0")
+set(PCL_ROOT "/home/tjurm/MylibInstall/pcl-1.11.0")
+set(PCL_DIR "/home/tjurm/MylibInstall/pcl-1.11.0/share/pcl-1.11")
+list(REMOVE_ITEM CMAKE_PREFIX_PATH "/usr")
+list(REMOVE_ITEM CMAKE_LIBRARY_PATH "/usr/lib/x86_64-linux-gnu")
 message(STATUS "PCL_INCLUDE_DIRS = ${PCL_INCLUDE_DIRS}")
-message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
-message(STATUS "CMAKE_ROOT = ${CMAKE_ROOT}")
 
-find_package(PCL 1.11.0 EXACT COMPONENTS 
-            common kdtree io filters features search sample_consensus octree openmp
-)
+
+find_package(PCL 1.11.0 REQUIRED COMPONENTS common kdtree io filters features search sample_consensus octree)
+# Remove system PCL 1.10 headers from include paths
+# list(FILTER PCL_INCLUDE_DIRS EXCLUDE REGEX "/usr/include/pcl-1.10")
+include_directories(${PCL_INCLUDE_DIRS})
+# file(GLOB PCL_LIBRARIES /home/tjurm/MylibInstall/pcl-1.11.0/lib/libpcl_* usr/lib/x86_64-linux-gnu/libboost_system.so.1.71.0
+# /usr/lib/x86_64-linux-gnu/libboost_system.so /usr/lib/x86_64-linux-gnu/libboost_filesystem.so /usr/lib/x86_64-linux-gnu/libboost_date_time.so
+# /usr/lib/x86_64-linux-gnu/libboost_iostreams.so
+# /usr/lib/x86_64-linux-gnu/libboost_serialization.so /usr/lib/x86_64-linux-gnu/libboost_regex.so)
+# set(PCL_INCLUDE_DIRS /home/tjurm/MylibInstall/pcl-1.11.0/include/pcl-1.11 /usr/include/eigen3 
+# /usr/include/ni /usr/include/openni2 /usr/include/vtk-7.1 /usr/include/freetype2 /usr/include/x86_64-linux-gnu )
+
+
 message(STATUS "PCL_INCLUDE_DIRS = ${PCL_INCLUDE_DIRS}")
 find_package(OpenMP REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
@@ -160,7 +164,6 @@ include_directories(include
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_definitions(${PCL_DEFINITIONS})
 add_executable(relocalization src/relocalization.cpp)
 
 ## Rename C++ executable without prefix
@@ -174,14 +177,15 @@ add_executable(relocalization src/relocalization.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
+link_directories(/home/tjurm/MylibInstall/pcl-1.11.0/lib)
 target_link_libraries(${PROJECT_NAME}
   PUBLIC 
   ${PCL_LIBRARIES}
+  /home/tjurm/MylibInstall/pcl-1.11.0/lib/libpcl_filters.so
+  /home/tjurm/MylibInstall/pcl-1.11.0/lib/libpcl_common.so
   OpenMP::OpenMP_CXX
   ${catkin_LIBRARIES}
-  -Wl,-rpath=/home/wqx/MyLibInstall/pcl-1.11/lib
 )
-
 #############
 ## Install ##
 #############

@@ -1,0 +1,4 @@
+<launch>
+    <node pkg="tracking" type="serial" name="serial" output="screen">
+    </node>
+</launch>

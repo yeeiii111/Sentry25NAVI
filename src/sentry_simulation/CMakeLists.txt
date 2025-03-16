@@ -96,3 +96,8 @@ catkin_install_python(PROGRAMS
   src/auto_obstacle.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
+catkin_install_python(PROGRAMS
+  src/launch_controller.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+

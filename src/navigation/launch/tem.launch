@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<launch>
+
+    <node name="map_server" pkg="map_server" type="map_server" args="$(find navigation)/map/505.yaml" output="screen">
+        <param name="frame_id" value="map" />
+    </node>
+
+</launch>
+<!-- <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 -1.5708 0 0 map odom 0.1" /> --> 
+    
+  
+  <!--Launch the move base with time elastic band-->
+ 

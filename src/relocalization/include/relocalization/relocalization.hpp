@@ -23,6 +23,7 @@
 #include "small_gicp/registration/registration.hpp"
 #include "small_gicp/pcl/pcl_registration.hpp"
 #include <pcl/features/fpfh_omp.h>
+#include <pcl/keypoints/iss_3d.h>
 #include <pcl/features/normal_3d.h>
 // 下面这个头文件，不包含intellisense就疯狂报错，不知道为什么
 // 后发现是mutex必须放在point_cloud.h point_types.h之前，如果放在之后且包含下面的头文件，就不报错但没有代码提示，
@@ -41,11 +42,15 @@ public:
     void compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud, 
                             pcl::search::KdTree<pcl::PointXYZ>::Ptr &tree,
                             pcl::PointCloud<pcl::FPFHSignature33>::Ptr &fpfh);
-    pcl::PointCloud<pcl::PointXYZ> fpfh_compute(pcl::PointCloud<pcl::PointXYZ>::Ptr source_cloud, 
+    pcl::PointCloud<pcl::PointXYZ> ISS_compute(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud,
+                                                pcl::search::KdTree<pcl::PointXYZ>::Ptr &tree);
+    pcl::PointCloud<pcl::PointXYZ> sac_ia_compute(pcl::PointCloud<pcl::PointXYZ>::Ptr source_cloud, 
                                                 pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud);
 private:
     bool                                        debug_en;
+    bool                                        first_time;
     bool                                        localize_success;
+    bool                                        use_stl_cloud;
     std_msgs::Bool                              diverge;
     int                                         freq;
     int                                         pointcloud_count;
@@ -56,6 +61,11 @@ private:
     double                                      map_leaf_size;
     double                                      max_dist_sq;
     double                                      max_iterations;
+    double                                      lidar_roll;
+    double                                      lidar_height;
+    double                                      y_dist;
+    double                                      previous_error;
+    double                                      yaw_bias_cnt;//挨个尝试初始位姿的计数器
     std::string                                 pcd_path;
     pcl::PointCloud<pcl::PointXYZ>::Ptr         scan;
     pcl::PointCloud<pcl::PointXYZ>::Ptr         scan_odom;
@@ -80,17 +90,20 @@ private:
     ros::Publisher                              source_pub;
     ros::Publisher                              align_pub;
     ros::Publisher                              diverge_pub;
+    ros::Publisher                              iss_source_pub;
+    ros::Publisher                              iss_target_pub;
     ros::Timer                                  run_timer;
-    geometry_msgs::TransformStamped             T_map_odom;
+    geometry_msgs::TransformStamped             T_vice_map_odom;
     tf2_ros::StaticTransformBroadcaster         broadcaster;
     Eigen::Affine3d                             T_map_scan;
+    Eigen::Affine3d                             T_map_vice_map;
     Eigen::Isometry3d                           T_odom_lidar;
     Eigen::Isometry3d                           previous_icp_result;
     Eigen::Isometry3d                           fpfh_result;
     std::mutex                                  scan_mutex;
     pcl::PointCloud<pcl::Normal>::Ptr           point_normal;
-
     pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> est_normal;
     pcl::FPFHEstimationOMP<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> est_fpfh;
+    pcl::ISSKeypoint3D<pcl::PointXYZ, pcl::PointXYZ> est_iss;
 
 };

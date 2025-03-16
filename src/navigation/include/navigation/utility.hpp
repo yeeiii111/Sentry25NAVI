@@ -19,7 +19,6 @@ bool GetTargetRobotPose(const std::shared_ptr<tf::TransformListener>& tf_listene
   robot_pose_tf.setIdentity();
   robot_pose_tf.frame_id_ = "base_link";
   robot_pose_tf.stamp_ = ros::Time();
-
   tf::Stamped<tf::Pose> robot_target_pose_tf;
   try{
     tf_listener->transformPose( target_frame, robot_pose_tf, robot_target_pose_tf);
@@ -30,5 +29,17 @@ bool GetTargetRobotPose(const std::shared_ptr<tf::TransformListener>& tf_listene
   }
   tf::poseStampedTFToMsg(robot_target_pose_tf, robot_target_pose);
   return true;
+}
+double anglelimit(double angle_in){
+  double angle_out;
+  if (angle_in > M_PI) angle_out = angle_in - 2*M_PI;
+  else if (angle_in < -M_PI) angle_out = angle_in + 2*M_PI;
+  else angle_out = angle_in;
+  return angle_out;
+}
+int signum(double num){
+  if(num > 0) return 1;
+  else if(num < 0) return -1;
+  else return 0;
 }
 #endif

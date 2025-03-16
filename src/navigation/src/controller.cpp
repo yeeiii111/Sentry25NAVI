@@ -11,7 +11,9 @@ Controller::Controller()
     nh.param<double>("goal_dist_tolerance", goal_dist_tolerance, 0.2);
     nh.param<double>("prune_ahead_distance", prune_ahead_dist, 0.5);
     nh.param<std::string>("global_frame", global_frame, "map");
-    
+    nh.param<double>("wz_const", wz_const, 0.5);
+    nh.param<double>("turn_tolerance",turn_tolerance,0.3);
+    nh.param<bool>("debug_en", debug_en ,false);
     local_path_pub = nh.advertise<nav_msgs::Path>("local_path",5);
     global_path_sub = nh.subscribe("/move_base/GlobalPlanner/plan",5,&Controller::GlobalPathCallback,this);
     act_command_sub = nh.subscribe("/diverge",5,&Controller::LocalizationStatusCallback,this);
@@ -26,22 +28,34 @@ Controller::Controller()
 void Controller::Plan(const ros::TimerEvent& event){
 
     if(plan){
+        ROS_INFO("plan_start");
         auto start = ros::Time::now();
         geometry_msgs::PoseStamped robot_pose;
         GetTargetRobotPose(tf_listener, global_path.header.frame_id, robot_pose);
-        if (GetEuclideanDistance(robot_pose,global_path.poses.back())<= goal_dist_tolerance
+        double EuclideanDistance = GetEuclideanDistance(robot_pose,global_path.poses.back());
+        if (EuclideanDistance <= goal_dist_tolerance
             || prune_index == global_path.poses.size() - 1){
             plan = false;
             geometry_msgs::Twist cmd_vel;
             cmd_vel.linear.x = 0;
             cmd_vel.linear.y = 0;
-            cmd_vel.angular.z = 0;
             cmd_vel_pub.publish(cmd_vel);
             ROS_INFO("Planning Success!");
             prune_index = 0;
             return;
         }
-
+        else if(EuclideanDistance > turn_tolerance && abs(YawErrorCal(robot_pose,global_path)) > M_PI/3 )
+        {
+            geometry_msgs::Twist cmd_vel;
+            cmd_vel.linear.x = 0;
+            cmd_vel.linear.y = 0;
+            cmd_vel.angular.z = signum(YawErrorCal(robot_pose,global_path)) * wz_const;
+            cmd_vel_pub.publish(cmd_vel);
+            ROS_INFO("Turnning attitude!");
+            std::cout << "yaw error = " << YawErrorCal(robot_pose,global_path) << std::endl;
+            return;
+        }
+        
         FindNearstPose(robot_pose,global_path,prune_index, prune_ahead_dist);
         
         nav_msgs::Path prune_path, local_path;
@@ -56,6 +70,7 @@ void Controller::Plan(const ros::TimerEvent& event){
         }
 
         GenTraj(prune_path, local_path);
+        local_path.header.frame_id = "map";
         local_path_pub.publish(local_path);
 
         geometry_msgs::Twist cmd_vel;
@@ -69,11 +84,30 @@ void Controller::Plan(const ros::TimerEvent& event){
             cmd_vel.angular.z = set_yaw_speed;
             cmd_vel.linear.z = 0;   // bool success or not
             cmd_vel_pub.publish(cmd_vel);
+            if(debug_en){
+                geometry_msgs::PoseStamped robot_pose;
+                GetTargetRobotPose(tf_listener, "map", robot_pose);
+                double tem = anglelimit(tf2::getYaw(robot_pose.pose.orientation)+M_PI_2);
+                std::cout << "attitude:"<<tem<<std::endl;
+                std::cout << "yaw:" <<tf2::getYaw(robot_pose.pose.orientation)<<std::endl;
+            }
     }
     
 
 }
-
+double Controller::YawErrorCal(geometry_msgs::PoseStamped& robot_pose,
+                                nav_msgs::Path& path){
+    double robot_attitude = anglelimit(tf2::getYaw(robot_pose.pose.orientation) + M_PI_2);
+    if(debug_en){
+        std::cout << "robot_attitude:"<<robot_attitude<<std::endl;
+    }
+    int target_idx = std::min(prune_index + 5, (int)path.poses.size()-1);
+    double dx = path.poses[target_idx].pose.position.x - robot_pose.pose.position.x;
+    double dy = path.poses[target_idx].pose.position.y - robot_pose.pose.position.y;
+    double path_attitude = atan2(dy, dx);
+    //double path_attitude = atan2(path.poses.back().pose.position.y , path.poses.back().pose.position.x );
+    return anglelimit(path_attitude - robot_attitude);
+}
 void Controller::GlobalPathCallback(const nav_msgs::PathConstPtr & msg){
   if (!msg->poses.empty()){
       global_path = *msg;
@@ -85,6 +119,9 @@ void Controller::LocalizationStatusCallback(const std_msgs::BoolConstPtr &msg){
     if(msg->data == 1){
         diverge = true;
         plan = false;
+    }
+    else {
+        diverge = false;
     }
 }
 
@@ -131,19 +168,18 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
         GetTargetRobotPose(tf_listener, global_path.header.frame_id, robot_pose_1); 
 
         yaw = tf::getYaw(robot_pose.pose.orientation);
-
+        double diff_distance = GetEuclideanDistance(robot_pose,traj.poses[1]);
+        if (diff_distance < 1e-3) { // 避免除以零
+            cmd_vel.linear.x = 0;
+            cmd_vel.linear.y = 0;
+            cmd_vel.angular.z = set_yaw_speed;
+            return;
+        }
         //double diff_yaw = GetYawFromOrientation(traj.poses[0].pose.orientation)- GetYawFromOrientation(robot_pose.pose.orientation);
         double diff_yaw = atan2((traj.poses[1].pose.position.y-robot_pose.pose.position.y ),( traj.poses[1].pose.position.x-robot_pose.pose.position.x));
-        
-        double diff_distance = GetEuclideanDistance(robot_pose,traj.poses[1]);
 
         // set it from -PI t
-        if(diff_yaw > M_PI){
-            diff_yaw -= 2*M_PI;
-        } else if(diff_yaw < -M_PI){
-            diff_yaw += 2*M_PI;
-        }
-
+        diff_yaw = anglelimit(diff_yaw);
         printf("diff_yaw: %f\n",diff_yaw);
         printf("diff_distance: %f\n",diff_distance);
 

@@ -32,6 +32,8 @@ public:
                     const nav_msgs::Path& traj,
                     geometry_msgs::Twist& cmd_vel);
     void Plan(const ros::TimerEvent& event);
+    double YawErrorCal(geometry_msgs::PoseStamped& robot_pose,
+                    nav_msgs::Path& path);
 private:
     ros::Publisher cmd_vel_pub;
     ros::Publisher local_path_pub;
@@ -44,15 +46,18 @@ private:
     nav_msgs::Path global_path;
     bool diverge = false;
     bool plan = false;
+    bool debug_en;
     int prune_index = 0;
 
     double max_speed;
     double set_yaw_speed = 0;
 
     double p_value;
+    double wz_const;
 
     int plan_freq;
     double goal_dist_tolerance;
+    double turn_tolerance;
     double prune_ahead_dist;
 
     double yaw;

@@ -1,5 +1,6 @@
 #include "segmentation/segmentation.hpp"
 #include "segmentation/utility.hpp"
+#include <pcl/filters/passthrough.h>
 #include <pcl/common/transforms.h>
 
 Obstacle_detector::Obstacle_detector():
@@ -9,7 +10,6 @@ Obstacle_detector::Obstacle_detector():
     scan_sensor (new pcl::PointCloud<pcl::PointXYZ>),
     scan_map (new pcl::PointCloud<pcl::PointXYZ>),
     last_scan_sensor(new pcl::PointCloud<pcl::PointXYZ>){
-
     ros::NodeHandle nh("~");
     nh.param<double>("distance_threshold", distance_threshold, 0.2);
     nh.param<std::string>("map_path", map_path, "");
@@ -22,6 +22,10 @@ Obstacle_detector::Obstacle_detector():
     nh.param<bool>("prior_map_pub_en", prior_map_pub_en, 0);
     nh.param<bool>("use_livox_cloud",use_livox_cloud, 0);
     nh.param<double>("diverge_threshold",diverge_threshold,0.5);
+    nh.param<double>("lidar_height",lidar_height,0.145);
+    nh.param<double>("lidar_roll",lidar_roll,-0.349);
+    nh.param<bool>("debug_en",debug_en,0);
+    nh.param<bool>("use_stl_cloud", use_stl_cloud, false);
     Eigen::Vector3d translation(extrinT.data());
     Eigen::Matrix3d rotation;
     rotation << extrinR[0],extrinR[1],extrinR[2],
@@ -43,10 +47,6 @@ Obstacle_detector::Obstacle_detector():
         T_baselink_sensor.linear() = imu_rotation;
         T_baselink_sensor.translation() = imu_translation;          
     }
-    // //map frame绕z轴转-90度是odom frame
-    // Eigen::AngleAxisd yaw(-M_PI/2,Eigen::Vector3d::UnitZ());
-    // T_map_odom = Eigen::Affine3d::Identity();
-    // T_map_odom.linear() = yaw.toRotationMatrix();
     //-------------------------------livox_cloud or standard cloud-------------------------------//
     if(use_livox_cloud == 1)
     {
@@ -65,18 +65,31 @@ Obstacle_detector::Obstacle_detector():
         ROS_ERROR("Load PCD file failed");
         ros::shutdown();
     }
+    //如果用扫描得到的点云当作目标，要先把点云转换到地图坐标系，而不是建图时pointlio的起点坐标系
+    // if(use_stl_cloud == false){
+    //     Eigen::Affine3d   T_map_vice_map;
+    //     T_map_vice_map = Eigen::Isometry3d::Identity();
+    //     Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitX());
+    //     T_map_vice_map.linear() = roll.toRotationMatrix();
+    //     T_map_vice_map.translation().z() = lidar_height;
+    //     pcl::transformPointCloud(*prior_map, *prior_map, T_map_vice_map);
+    // }
     //方便KDtree有序存储
     pcl::VoxelGrid<pcl::PointXYZ> downsample;
     downsample.setInputCloud(prior_map);
     downsample.setLeafSize(leaf_size,leaf_size,leaf_size);
-    // pcl::PointCloud<pcl::PointXYZ> tem;
     downsample.filter(*filtered_prior_map);
-    //filtered_prior_map = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ>>(tem);
     kdtree.setInputCloud(filtered_prior_map);
     std::cout<<filtered_prior_map->size()<<std::endl;
 }
 void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_map){
     auto start_time = std::chrono::high_resolution_clock::now();
+    pcl::PassThrough<pcl::PointXYZ> passTh;
+    passTh.setInputCloud(scan_map);                                                    // 输入原始点云
+    passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
+    passTh.setFilterLimits(-0.255, 2.2);                                               // 阈值范围
+    passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
+    passTh.filter(*scan_map); 
     for (const auto& pt : scan_map->points){
         std::vector<int> indices(1);
         std::vector<float> sqr_distance(1);
@@ -94,8 +107,12 @@ void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_m
     auto end_time = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double, std::milli> duration = end_time - start_time;
-    std::cout << "detect function took " << duration.count() << " milliseconds" << std::endl;    
-    std::cout << "obstacle point percentage " << per*100<<"%" <<std::endl;
+    if(debug_en)
+    {
+        std::cout << "detect function took " << duration.count() << " milliseconds" << std::endl;    
+        std::cout << "obstacle point percentage " << per*100<<"%" <<std::endl;
+    }
+
 }
 void Obstacle_detector::timer(const ros::TimerEvent &event){
 
@@ -105,7 +122,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
         GetTargetPose(tf_listener,"map","base_link",robot_pose,last_scan_timestamp);
     }
     else{
-        GetTargetPose(tf_listener,"map","odom",robot_pose,last_scan_timestamp);       
+        GetTargetPose(tf_listener,"vice_map","odom",robot_pose,last_scan_timestamp);       
     }
     Eigen::Vector3d position(robot_pose.pose.position.x,
                          robot_pose.pose.position.y,
@@ -121,7 +138,8 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
     T_map_target.translation() = position;
     //-------------------------------livox_cloud or standard cloud-------------------------------//
     Eigen::Affine3d T_map_sensor;
-    T_map_sensor = T_map_target * T_baselink_sensor;
+    T_map_sensor = T_map_target;
+    //T_map_sensor = T_map_target * T_baselink_sensor;
     pcl::PointCloud<pcl::PointXYZ>::Ptr scan_local (new pcl::PointCloud<pcl::PointXYZ>());
     {
         std::lock_guard<std::mutex> lock(scan_mutex);
@@ -135,7 +153,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
         detect(scan_map);
         sensor_msgs::PointCloud2 obstacle_ros;
         pcl::toROSMsg(*obstacle,obstacle_ros);
-        obstacle_ros.header.frame_id = "map";
+        obstacle_ros.header.frame_id = "vice_map";
         obstacle_ros.header.stamp = ros::Time::now();
         obstacle_pub.publish(obstacle_ros);
 
@@ -145,7 +163,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
     {
         sensor_msgs::PointCloud2 prior_map_ros;
         pcl::toROSMsg(*filtered_prior_map,prior_map_ros);
-        prior_map_ros.header.frame_id = "map";
+        prior_map_ros.header.frame_id = "vice_map";
         prior_map_pub.publish(prior_map_ros);
     }
 }

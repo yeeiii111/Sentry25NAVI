@@ -7,6 +7,8 @@ project(navigation)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
@@ -143,6 +145,9 @@ include_directories(include ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
 # set_target_properties(${PROJECT_NAME}_node PROPERTIES OUTPUT_NAME node PREFIX "")
 add_executable(controller src/controller.cpp)
 target_link_libraries(controller ${catkin_LIBRARIES})
+
+add_executable(costmap_clean src/costmap_clean.cpp)
+target_link_libraries(costmap_clean ${catkin_LIBRARIES})
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})

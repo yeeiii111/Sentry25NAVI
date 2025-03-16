@@ -2,11 +2,15 @@
 <launch>
     <node name="controller" pkg="navigation" type="controller" output="screen">
         <param name="global_frame" value="map"/>
-        <param name="plan_frequency" value="50"/>
+        <param name="plan_frequency" value="500"/>
         <param name="set_yaw_speed" value="0"/>
-        <param name="goal_dist_tolerance" value="0.25"/>
+        <param name="goal_dist_tolerance" value="0.2"/>
+        <param name="turn_tolerance" value="0.3"/>
         <param name="prune_ahead_distance" value="2"/>
         <param name="p_value" value="10"/>
         <param name="max_speed" value="5"/>
+        <param name="wz_const" value="0.5"/>
+        <param name="debug_en" value="false"/>
     </node>
 </launch>
+<!-- p_value 10 30 -->

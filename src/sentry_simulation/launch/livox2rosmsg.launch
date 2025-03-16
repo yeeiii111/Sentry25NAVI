@@ -1,0 +1,3 @@
+<launch>  
+    <node pkg="sentry_simulation" name="livox2rosmsg" type="livox2rosmsg" output="screen"/>
+</launch>

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(tracking)
-
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 set(CMAKE_CXX_STANDARD 17)
@@ -13,7 +13,8 @@ set(PCL_DIR "/usr/lib/x86_64-linux-gnu/cmake/pcl")
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
-
+  std_msgs
+  serial
 )
 
 ## System dependencies are found with CMake's conventions
@@ -138,7 +139,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(tracking src/tracking.cpp)
-
+add_executable(serial src/serial.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -153,6 +154,9 @@ add_executable(tracking src/tracking.cpp)
 target_link_libraries(tracking
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+)
+target_link_libraries(serial
+  ${catkin_LIBRARIES}
 )
 
 #############
