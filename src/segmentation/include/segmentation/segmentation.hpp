@@ -37,6 +37,7 @@ private:
     bool                                            use_livox_cloud;
     bool                                            debug_en;
     std_msgs::Bool                                  diverge;
+    std_msgs::Bool                                  match;
     pcl::KdTreeFLANN<pcl::PointXYZ>                 kdtree;
     std::string                                     map_path;
     ros::Timer                                      run_timer;
@@ -53,7 +54,9 @@ private:
     ros::Publisher                                  obstacle_pub;
     ros::Publisher                                  prior_map_pub;
     ros::Publisher                                  diverge_pub;
+    ros::Publisher                                  match_pub;//点云匹配上一定match，没匹配上可能是里程计退化也可能只是瞬间角速度太大，所以用两个标志位描述定位状态
     ros::Subscriber                                 scan_sub;
+    std::chrono::time_point<std::chrono::high_resolution_clock>     match_time;
     std::vector<double>                             extrinT;
     std::vector<double>                             extrinR;
     std::vector<double>                             IMU_extrinT;

@@ -21,7 +21,8 @@ Relocalization::Relocalization():
     source_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>()),
     target_fpfh(new pcl::PointCloud<pcl::FPFHSignature33>()),
     point_normal(new pcl::PointCloud<pcl::Normal>()),
-    previous_icp_result(Eigen::Isometry3d::Identity()){
+    previous_icp_result(Eigen::Isometry3d::Identity()),
+    T_relocalize(Eigen::Isometry3d::Identity()){
     register_ = std::make_shared<small_gicp::Registration<small_gicp::GICPFactor, small_gicp::ParallelReductionOMP>>();
     tf_listener = std::make_unique<tf2_ros::TransformListener>(tf2_buffer);
     ros::NodeHandle nh("relocalization");
@@ -45,6 +46,7 @@ Relocalization::Relocalization():
     scan_sub = nh.subscribe("/livox/lidar_ros",5,&Relocalization::Standard_Scan_Callback,this);
     initial_pose_sub = nh.subscribe("/initialpose",5,&Relocalization::InitialPoseCallback,this);
     diverge_sub = nh.subscribe("/diverge",5,&Relocalization::Diverge_Callback,this);
+    match_sub = nh.subscribe("/match",5,&Relocalization::Match_Callback,this);
     target_pub = nh.advertise<sensor_msgs::PointCloud2>("target",5);
     source_pub = nh.advertise<sensor_msgs::PointCloud2>("source",5);
     align_pub = nh.advertise<sensor_msgs::PointCloud2>("aligned",5);
@@ -54,6 +56,7 @@ Relocalization::Relocalization():
     first_time = true;
     y_dist = 0;
     previous_error = 0;
+    yaw_bias_cnt = 0;
     // diverge_pub= nh.advertise<std_msgs::Bool>("/diverge",5);
     run_timer = nh.createTimer(ros::Duration(1.0/freq),&Relocalization::timer,this);
 
@@ -73,13 +76,13 @@ Relocalization::Relocalization():
     //     T_map_vice_map.translation().z() = lidar_height;
     //     pcl::transformPointCloud(*filtered_prior_map, *filtered_prior_map, T_map_vice_map);
     // }    
-    //保留高处点云做粗配准
-    pcl::PassThrough<pcl::PointXYZ> passTh;
-    passTh.setInputCloud(filtered_prior_map);                                                    // 输入原始点云
-    passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
-    passTh.setFilterLimits(0.2, 3);                                               // 阈值范围
-    passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
-    passTh.filter(*high_features_map); 
+    // //保留高处点云做粗配准
+    // pcl::PassThrough<pcl::PointXYZ> passTh;
+    // passTh.setInputCloud(filtered_prior_map);                                                    // 输入原始点云
+    // passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
+    // passTh.setFilterLimits(0, 3);                                               // 阈值范围
+    // passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
+    // passTh.filter(*high_features_map); 
     // if(use_stl_cloud == false){
     //     pcl::transformPointCloud(*high_features_map, *high_features_map, T_map_vice_map.inverse());
     //     pcl::transformPointCloud(*filtered_prior_map, *filtered_prior_map, T_map_vice_map.inverse());
@@ -125,12 +128,27 @@ void Relocalization::timer(const ros::TimerEvent& event)
             broadcaster.sendTransform(T_vice_map_odom);
             // diverge_pub.publish(diverge);            
         }
-        else
+        if(match.data == true)
         {
-            auto robot_pose = tf2_buffer.lookupTransform("map","base_link",ros::Time(0));
-            y_dist = robot_pose.transform.translation.y;
+            // auto robot_pose = tf2_buffer.lookupTransform("map","body",ros::Time(0));
+            // y_dist = robot_pose.transform.translation.y;
+            // // 提取平移部分并赋值给 Isometry3d
+            // Eigen::Vector3d translation(
+            //     robot_pose.transform.translation.x,
+            //     robot_pose.transform.translation.y,
+            //     robot_pose.transform.translation.z
+            // );
+            // previous_icp_result.translation() = translation;
+            // T_relocalize.translation() = translation;
+            // // 提取四元数并转换为旋转矩阵，赋值给 Isometry3d
+            // Eigen::Quaterniond quat(
+            //     robot_pose.transform.rotation.w,
+            //     robot_pose.transform.rotation.x,
+            //     robot_pose.transform.rotation.y,
+            //     robot_pose.transform.rotation.z
+            // );
+            // previous_icp_result.rotate(quat.toRotationMatrix());
         }
-
     }
     //debug
     if(debug_en)
@@ -140,15 +158,15 @@ void Relocalization::timer(const ros::TimerEvent& event)
         msg_1.header.frame_id = "map";  
         target_pub.publish(msg_1); 
 
-        sensor_msgs::PointCloud2 msg_2;
-        pcl::toROSMsg(*scan_odom, msg_2);
-        msg_2.header.frame_id = "map";  
-        source_pub.publish(msg_2); 
+        // sensor_msgs::PointCloud2 msg_2;
+        // pcl::toROSMsg(*scan_odom, msg_2);
+        // msg_2.header.frame_id = "map";  
+        // source_pub.publish(msg_2); 
 
-        sensor_msgs::PointCloud2 msg_3;
-        pcl::toROSMsg(*aligned, msg_3);
-        msg_3.header.frame_id = "map";  
-        align_pub.publish(msg_3);       
+        // sensor_msgs::PointCloud2 msg_3;
+        // pcl::toROSMsg(*aligned, msg_3);
+        // msg_3.header.frame_id = "map";  
+        // align_pub.publish(msg_3);       
     }
 
 }
@@ -159,7 +177,7 @@ void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &sou
     pcl::PassThrough<pcl::PointXYZ> passTh;
     passTh.setInputCloud(source);                                                    // 输入原始点云
     passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
-    passTh.setFilterLimits(-0.255, 3);                                               // 阈值范围
+    passTh.setFilterLimits(-0.3, 3);                                               // 阈值范围
     passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
     passTh.filter(*source); 
 
@@ -171,11 +189,13 @@ void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &sou
     // if(use_stl_cloud == false){
     //     pcl::transformPointCloud(*filtered_scan_odom, *filtered_scan_odom, T_map_vice_map);
     // }   
-    passTh.setInputCloud(filtered_scan_odom);                                                    // 输入原始点云
-    passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
-    passTh.setFilterLimits(0.2, 3);                                               // 阈值范围
-    passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
-    passTh.filter(*high_features_scan); 
+
+    // passTh.setInputCloud(filtered_scan_odom);                                                    // 输入原始点云
+    // passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
+    // passTh.setFilterLimits(0, 3);                                               // 阈值范围
+    // passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
+    // passTh.filter(*high_features_scan); 
+
     // if(use_stl_cloud == false){
     //     pcl::transformPointCloud(*filtered_scan_odom, *filtered_scan_odom, T_map_vice_map.inverse());
     //     pcl::transformPointCloud(*high_features_scan, *high_features_scan, T_map_vice_map.inverse());
@@ -207,19 +227,27 @@ void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &sou
     previous_icp_result = result.T_target_source;
     if(result.error < diverge_threshold){
         localize_success  = true;
+        previous_error = 0;
     }
     else {
         localize_success = false;
         if(result.error >= previous_error || (previous_error - result.error < 5))//无法收敛时换一个先验位姿
         {
-            yaw_bias_cnt ++; 
             previous_error = 100000.0f;
-            Eigen::Isometry3d T_rotation = Eigen::Isometry3d::Identity();
-            double yaw_bias = yaw_bias_cnt * 0.3491f;//每次旋转20度
-            Eigen::AngleAxis yaw(yaw_bias,Eigen::Vector3d::UnitZ());
-            T_rotation.linear() = yaw.toRotationMatrix();
-            previous_icp_result = T_rotation;
+            // Eigen::Isometry3d T_rotation = Eigen::Isometry3d::Identity();
+            double yaw_bias;
+            if(yaw_bias_cnt % 2 == 0) yaw_bias = (yaw_bias_cnt/2 + 1) * 0.3491f;//每次旋转20度
+            else yaw_bias = -(yaw_bias_cnt/2 + 1) * 0.3491f;
+            std::cout << "yaw_bias:" << yaw_bias <<std::endl;
+            double angle_x = 20.0 * M_PI / 180.0;  // 转换为弧度
+            Eigen::AngleAxisd rotate_x(angle_x, Eigen::Vector3d::UnitX());
+            Eigen::Vector3d new_axis = rotate_x * Eigen::Vector3d::UnitZ();
+            Eigen::AngleAxis yaw(yaw_bias,new_axis);
+            T_relocalize.linear() = yaw.toRotationMatrix();
+            previous_icp_result = T_relocalize;
+            yaw_bias_cnt ++; 
         }
+        else previous_error = result.error;
     }
     if(debug_en){
         Eigen::Affine3d tem(T_map_scan);
@@ -278,6 +306,10 @@ void Relocalization::Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstP
 void Relocalization::Diverge_Callback(const std_msgs::Bool::ConstPtr &msg)
 {
     diverge.data = msg->data;
+}
+void Relocalization::Match_Callback(const std_msgs::Bool::ConstPtr &msg)
+{
+    match.data = msg->data;
 }
 void Relocalization::compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud, 
                                         pcl::search::KdTree<pcl::PointXYZ>::Ptr &tree,

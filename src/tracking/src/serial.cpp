@@ -18,7 +18,12 @@ void cmd_velCallback(geometry_msgs::TwistConstPtr msg)
     // ROS_INFO_STREAM("cmd_vel SENDING \n");
     send_msg.v_x = msg->linear.x;
     send_msg.v_y = msg->linear.y;
+    send_msg.v_z = msg->linear.z;
     send_msg.w_z = msg->angular.z;
+    if(isnan(msg->linear.x)) send_msg.v_x= 0;
+    if(isnan(msg->linear.y)) send_msg.v_y = 0;
+    if(isnan(msg->angular.z)) send_msg.w_z = 0;
+    if(isnan(msg->linear.z)) send_msg.v_z = 0;
     if(DEBUG_EN){
     std::cout<< "v_x:"<<send_msg.v_x <<std::endl;
     std::cout<< "v_y:"<<send_msg.v_y<<std::endl;
@@ -77,28 +82,103 @@ int main(int argc, char  *argv[])
             }
             memcpy(&received_msg,ordered_buffer,sizeof(gimbal_serial_msg::serial_receive_msg));
         }
-        if(count == 0 &&(!DEBUG_EN))
-        {
+        if((!DEBUG_EN))
+        {   //home
             if(received_msg.goal == 0)
             {
                 goal.pose.position.z = 0.0;
-                goal.pose.position.y = 1.08381;
-                goal.pose.position.x = -1.47054;
-                goal.pose.orientation.z = 0.32106;
+                goal.pose.position.y = 0.0966;
+                goal.pose.position.x = -0.042;
+                goal.pose.orientation.z = 0.40139;
                 goal.pose.orientation.y = 0;
                 goal.pose.orientation.x = 0;
-                goal.pose.orientation.w = 0.94705;
+                goal.pose.orientation.w = 0.91591;
             }
             if(received_msg.goal == 1 )   
             {
                 goal.pose.position.z = 0.0;
-                goal.pose.position.y = 10.11645;
-                goal.pose.position.x = 3.55751;
-                goal.pose.orientation.z = 0.50788;
+                goal.pose.position.y = 1.94381;
+                goal.pose.position.x = 5.07933;
+                goal.pose.orientation.z = 0.850299;
                 goal.pose.orientation.y = 0;
                 goal.pose.orientation.x = 0;
-                goal.pose.orientation.w = 0.86142;
+                goal.pose.orientation.w = 0.526210;
             }
+
+            //center
+            if(received_msg.goal == 2 )   
+            {
+                goal.pose.position.z = 0.0;
+                goal.pose.position.y = 4.664;
+                goal.pose.position.x = 3.167;
+                goal.pose.orientation.z = 0.8038;
+                goal.pose.orientation.y = 0;
+                goal.pose.orientation.x = 0;
+                goal.pose.orientation.w = 0.5948;
+            }
+
+            //enemy side
+            if(received_msg.goal == 3 )   
+            {
+                goal.pose.position.z = 0.0;
+                goal.pose.position.y = 6.96536;
+                goal.pose.position.x = 1.10679;
+                goal.pose.orientation.z = 0.48288;
+                goal.pose.orientation.y = 0;
+                goal.pose.orientation.x = 0;
+                goal.pose.orientation.w = 0.87568;
+            }
+
+            if(received_msg.goal == 4 )   
+            {
+                goal.pose.position.z = 0.0;
+                goal.pose.position.y = 8.91914;
+                goal.pose.position.x = 1.29128;
+                goal.pose.orientation.z = 0.42921;
+                goal.pose.orientation.y = 0;
+                goal.pose.orientation.x = 0;
+                goal.pose.orientation.w = 0.90321;
+            }          
+            // if(received_msg.goal == 1 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 1.94381;
+            //     goal.pose.position.x = 0;
+            //     goal.pose.orientation.z = 0.850299;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.526210;
+            // }
+            // if(received_msg.goal == 2 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 1.5;
+            //     goal.pose.position.x = 1;
+            //     goal.pose.orientation.z = 0.8038;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.5948;
+            // }
+            // if(received_msg.goal == 3 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 0;
+            //     goal.pose.position.x = -1;
+            //     goal.pose.orientation.z = 0.48288;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.87568;
+            // }
+            // if(received_msg.goal == 4 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 2;
+            //     goal.pose.position.x = 0;
+            //     goal.pose.orientation.z = 0.42921;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.90321;
+            // }
             goal.header.frame_id = "map";
             goal.header.stamp = ros::Time::now();
             goal_pub.publish(goal);
@@ -111,11 +191,11 @@ int main(int argc, char  *argv[])
             }
 
         }
-        count ++;
-        if(count>=50)
-        {
-            count = 0;
-        }
+        // count ++;
+        // if(count>=10)
+        // {
+        //     count = 0;
+        // }
         memcpy(tx_buffer,&send_msg,sizeof(send_msg));
         gimbal_serial.write(tx_buffer,sizeof(gimbal_serial_msg::serial_send_msg));
         ros::spinOnce();

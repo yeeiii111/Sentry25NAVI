@@ -8,6 +8,8 @@
 
 double GetEuclideanDistance(const geometry_msgs::PoseStamped & pose_1,
                             const geometry_msgs::PoseStamped & pose_2){
+  std::cout << "pose_1.x: " << pose_1.pose.position.x << std::endl;
+  std::cout << "pose_2.x: " << pose_2.pose.position.x << std::endl;
   return hypot(pose_1.pose.position.x-pose_2.pose.position.x,
                pose_1.pose.position.y-pose_2.pose.position.y);
 }
@@ -41,5 +43,17 @@ int signum(double num){
   if(num > 0) return 1;
   else if(num < 0) return -1;
   else return 0;
+}
+double computeCurvature(const geometry_msgs::PoseStamped& p1, 
+                        const geometry_msgs::PoseStamped& p2, 
+                        const geometry_msgs::PoseStamped& p3) {
+    // 计算向量
+    double dx1 = p2.pose.position.x- p1.pose.position.x, dy1 = p2.pose.position.y - p1.pose.position.y;
+    double dx2 = p3.pose.position.x - p2.pose.position.x, dy2 = p3.pose.position.y - p2.pose.position.y;
+    // 计算夹角变化
+    double angle_diff = atan2(dy2, dx2) - atan2(dy1, dx1);
+    // 曲率 = 1/曲率半径
+    if(std::isnan(angle_diff)) ROS_ERROR("curvature NAN");
+    return std::abs(angle_diff) / GetEuclideanDistance(p1, p3);
 }
 #endif

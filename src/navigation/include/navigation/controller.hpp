@@ -26,18 +26,20 @@ public:
     Controller();
     ~Controller();
     void GlobalPathCallback(const nav_msgs::PathConstPtr & msg);
-    void LocalizationStatusCallback(const std_msgs::BoolConstPtr &msg);
+    void DivergeCallback(const std_msgs::BoolConstPtr &msg);
+    void MatchCallback(const std_msgs::BoolConstPtr &msg);
     void FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs::Path& path, int& prune_index, double prune_ahead_dist);
     void FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
                     const nav_msgs::Path& traj,
                     geometry_msgs::Twist& cmd_vel);
     void Plan(const ros::TimerEvent& event);
-    double YawErrorCal(geometry_msgs::PoseStamped& robot_pose,
-                    nav_msgs::Path& path);
+    double YawErrorCal(const geometry_msgs::PoseStamped& robot_pose,
+                    const geometry_msgs::PoseStamped& path_pose);
 private:
     ros::Publisher cmd_vel_pub;
     ros::Publisher local_path_pub;
-    ros::Subscriber act_command_sub;
+    ros::Subscriber diverge_sub;
+    ros::Subscriber match_sub;
     ros::Subscriber global_path_sub;
     ros::Timer      plan_timer;
 
@@ -46,15 +48,21 @@ private:
     nav_msgs::Path global_path;
     bool diverge = false;
     bool plan = false;
+    bool turn_state = false;
     bool debug_en;
     int prune_index = 0;
+
 
     double max_speed;
     double set_yaw_speed = 0;
 
     double p_value;
+    double straight_p_value;
+    double curve_p_value;
+    double wz_p_value;
     double wz_const;
-
+    int straight_foresee_index;
+    int curve_foresee_index;   
     int plan_freq;
     double goal_dist_tolerance;
     double turn_tolerance;

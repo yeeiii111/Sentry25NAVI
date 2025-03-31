@@ -59,7 +59,16 @@ TrajInfo GenTraj(const nav_msgs::Path& path, nav_msgs::Path& smoothed_path, cons
     tmp_pose.pose.position.y = point_[1];
     tmp_pose.pose.position.z = 0;
     tmp_pose.pose.orientation = tf::createQuaternionMsgFromYaw(yaw);
-    smoothed_path.poses.push_back(tmp_pose);
+
+    if(  (!std::isnan(tmp_pose.pose.position.x)) &&
+        (!std::isnan(tmp_pose.pose.position.y)) &&
+        (!std::isnan(tmp_pose.pose.position.z)) &&
+        (!std::isnan(tmp_pose.pose.orientation.w)) &&
+        (!std::isnan(tmp_pose.pose.orientation.x)) &&
+        (!std::isnan(tmp_pose.pose.orientation.y)) &&
+        (!std::isnan(tmp_pose.pose.orientation.z)) 
+      ) 
+        smoothed_path.poses.push_back(tmp_pose);
 
   }
   return traj_info;

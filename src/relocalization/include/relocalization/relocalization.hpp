@@ -37,6 +37,7 @@ public:
     void registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, double leaf_size);
     void timer(const ros::TimerEvent& event);
     void Diverge_Callback(const std_msgs::Bool::ConstPtr &msg);
+    void Match_Callback(const std_msgs::Bool::ConstPtr &msg);
     void Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg);
     void InitialPoseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr msg);
     void compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud, 
@@ -52,10 +53,12 @@ private:
     bool                                        localize_success;
     bool                                        use_stl_cloud;
     std_msgs::Bool                              diverge;
+    std_msgs::Bool                              match;  
     int                                         freq;
     int                                         pointcloud_count;
     int                                         num_threads;
     int                                         num_neighbors;
+    int                                      yaw_bias_cnt;//挨个尝试初始位姿的计数器
     double                                      diverge_threshold;
     double                                      leaf_size;
     double                                      map_leaf_size;
@@ -65,7 +68,6 @@ private:
     double                                      lidar_height;
     double                                      y_dist;
     double                                      previous_error;
-    double                                      yaw_bias_cnt;//挨个尝试初始位姿的计数器
     std::string                                 pcd_path;
     pcl::PointCloud<pcl::PointXYZ>::Ptr         scan;
     pcl::PointCloud<pcl::PointXYZ>::Ptr         scan_odom;
@@ -86,6 +88,7 @@ private:
     ros::Subscriber                             scan_sub;
     ros::Subscriber                             initial_pose_sub;
     ros::Subscriber                             diverge_sub;
+    ros::Subscriber                             match_sub;
     ros::Publisher                              target_pub;
     ros::Publisher                              source_pub;
     ros::Publisher                              align_pub;
@@ -100,6 +103,7 @@ private:
     Eigen::Isometry3d                           T_odom_lidar;
     Eigen::Isometry3d                           previous_icp_result;
     Eigen::Isometry3d                           fpfh_result;
+    Eigen::Isometry3d                           T_relocalize; 
     std::mutex                                  scan_mutex;
     pcl::PointCloud<pcl::Normal>::Ptr           point_normal;
     pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> est_normal;

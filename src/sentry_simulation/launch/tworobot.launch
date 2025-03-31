@@ -10,8 +10,8 @@
     <arg name="origin_x" default="5.25" />
     <arg name="origin_y" default="-3" />
     <arg name="origin_z" default="0" />
-    <arg name="origin_x_1" default="0" />
-    <arg name="origin_y_1" default="0" />
+    <arg name="origin_x_1" default="4" />
+    <arg name="origin_y_1" default="-2" />
     <arg name="origin_z_1" default="0" />
     <arg name="origin_roll" default="0.000000" />
     <arg name="origin_pitch" default="0.000000" />

@@ -1,0 +1,16 @@
+<launch>
+    <node pkg="rosbag" type="record" name="bag_recorder" 
+          args="/livox/lidar
+                /livox/imu
+                /tf
+                /tf_static
+                /path
+                /move_base/global_costmap/costmap
+                /move_base/TrajectoryPlannerROS/global_plan
+                /detector/obstacle
+                /cloud_registered
+                /controller/local_path
+                /cmd_vel
+                /map
+                /relocalization/aligned"/>
+</launch>

@@ -56,6 +56,7 @@ Obstacle_detector::Obstacle_detector():
         scan_sub = nh.subscribe("/cloud_registered",5,&Obstacle_detector::Standard_Scan_Callback,this);
     }
     diverge_pub = nh.advertise<std_msgs::Bool>("/diverge",10);
+    match_pub = nh.advertise<std_msgs::Bool>("/match",10);
     obstacle_pub = nh.advertise<sensor_msgs::PointCloud2>("obstacle",10);
     prior_map_pub = nh.advertise<sensor_msgs::PointCloud2>("prior_map",10);
     tf_listener = std::make_shared<tf::TransformListener>();
@@ -66,14 +67,14 @@ Obstacle_detector::Obstacle_detector():
         ros::shutdown();
     }
     //如果用扫描得到的点云当作目标，要先把点云转换到地图坐标系，而不是建图时pointlio的起点坐标系
-    // if(use_stl_cloud == false){
-    //     Eigen::Affine3d   T_map_vice_map;
-    //     T_map_vice_map = Eigen::Isometry3d::Identity();
-    //     Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitX());
-    //     T_map_vice_map.linear() = roll.toRotationMatrix();
-    //     T_map_vice_map.translation().z() = lidar_height;
-    //     pcl::transformPointCloud(*prior_map, *prior_map, T_map_vice_map);
-    // }
+    if(use_stl_cloud == false){
+        Eigen::Affine3d   T_map_vice_map;
+        T_map_vice_map = Eigen::Isometry3d::Identity();
+        Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitX());
+        T_map_vice_map.linear() = roll.toRotationMatrix();
+        T_map_vice_map.translation().z() = lidar_height;
+        pcl::transformPointCloud(*prior_map, *prior_map, T_map_vice_map);
+    }
     //方便KDtree有序存储
     pcl::VoxelGrid<pcl::PointXYZ> downsample;
     downsample.setInputCloud(prior_map);
@@ -101,9 +102,18 @@ void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_m
     }  
     double per = static_cast<double>(obstacle->size())/scan_map->size();
     if(per > diverge_threshold)
-        diverge.data = true;
+        {
+            match.data = false;
+            std::chrono::duration<double, std::milli> diverge_duration = std::chrono::high_resolution_clock::now() - match_time;
+            if (diverge_duration > std::chrono::milliseconds(3000)) diverge.data = true;
+        }
     else
+    {
+        match.data = true;
+        match_time = std::chrono::high_resolution_clock::now();
         diverge.data = false;
+    }
+        
     auto end_time = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double, std::milli> duration = end_time - start_time;
@@ -122,7 +132,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
         GetTargetPose(tf_listener,"map","base_link",robot_pose,last_scan_timestamp);
     }
     else{
-        GetTargetPose(tf_listener,"vice_map","odom",robot_pose,last_scan_timestamp);       
+        GetTargetPose(tf_listener,"map","odom",robot_pose,last_scan_timestamp);       
     }
     Eigen::Vector3d position(robot_pose.pose.position.x,
                          robot_pose.pose.position.y,
@@ -158,6 +168,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
         obstacle_pub.publish(obstacle_ros);
 
         diverge_pub.publish(diverge);
+        match_pub.publish(match);
     }        
     if(prior_map_pub_en)
     {
