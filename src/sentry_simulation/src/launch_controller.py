@@ -71,7 +71,7 @@ if __name__ == "__main__":
     navi_path = package_path + "/launch/simu_navi.launch"
     controller.start_launch(navi_path, "navi") 
     controller_path = package_path +"/launch/controller.launch"
-    controller.start_launch(controller_path, "controller") 
+    # controller.start_launch(controller_path, "controller") 
 
     package_path = rospack.get_path("relocalization")
     localize_path = package_path + "/launch/relocalization.launch"
@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
     package_path = rospack.get_path("segmentation")
     segmentation_path = package_path + "/launch/obstacle_detect.launch"
-    controller.start_launch(segmentation_path, "relocalization")     
+    # controller.start_launch(segmentation_path, "segmentation")     
 
 
     # 订阅一个话题

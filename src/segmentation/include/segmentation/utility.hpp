@@ -6,8 +6,8 @@
 
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Quaternion.h>
-
-#include "livox_ros_driver2/CustomMsg.h"
+#define USE_GICP 1
+// #include "livox_ros_driver2/CustomMsg.h"
 #ifdef   USE_GICP
 #include "small_gicp/pcl/pcl_registration.hpp"
 #include "small_gicp/util/downsampling_omp.hpp"
@@ -44,7 +44,7 @@ bool GetTargetPose(const std::shared_ptr<tf::TransformListener>& tf_listener,
   return true;
 }
 #ifdef USE_GICP
-void registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, pcl::PointCloud<pcl::PointXYZ>::ConstPtr &target, double leaf_size)
+void registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, pcl::PointCloud<pcl::PointXYZ>::Ptr &target, double leaf_size)
 {
     auto start_time = std::chrono::high_resolution_clock::now();
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_source = small_gicp::voxelgrid_sampling_omp(*source, leaf_size , 6);
@@ -57,7 +57,7 @@ void registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, pcl::PointC
     reg.setNumThreads(4);
     reg.setCorrespondenceRandomness(10);
     reg.setMaxCorrespondenceDistance(1.0);
-    reg.setVoxelResolution(1.0);
+    reg.setVoxelResolution(0.1);
     reg.setRegistrationType("VGICP");
 
     reg.setInputTarget(target);
@@ -74,29 +74,29 @@ void registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, pcl::PointC
     std::cout << "registration function took " << duration.count() << " milliseconds" << std::endl;
 }
 #else
-void livox_msg_handler(const livox_ros_driver2::CustomMsg::ConstPtr &msg, pcl::PointCloud<pcl::PointXYZ>::Ptr &pl_surf)
-{
-    int pl_size = msg->point_num;
-    pcl::PointCloud<pcl::PointXYZ> pl_full;
-    pl_surf->clear();
-    pl_surf->reserve(pl_size);
-    pl_full.resize(pl_size);
-    for(uint i = 1; i < pl_size; i++)
-    {
-      pl_full[i].x = msg->points[i].x;
-      pl_full[i].y = msg->points[i].y;
-      pl_full[i].z = msg->points[i].z;
+// void livox_msg_handler(const livox_ros_driver2::CustomMsg::ConstPtr &msg, pcl::PointCloud<pcl::PointXYZ>::Ptr &pl_surf)
+// {
+//     int pl_size = msg->point_num;
+//     pcl::PointCloud<pcl::PointXYZ> pl_full;
+//     pl_surf->clear();
+//     pl_surf->reserve(pl_size);
+//     pl_full.resize(pl_size);
+//     for(uint i = 1; i < pl_size; i++)
+//     {
+//       pl_full[i].x = msg->points[i].x;
+//       pl_full[i].y = msg->points[i].y;
+//       pl_full[i].z = msg->points[i].z;
     
-      if(((abs(pl_full[i].x - pl_full[i-1].x) > 1e-7) 
-          || (abs(pl_full[i].y - pl_full[i-1].y) > 1e-7)
-          || (abs(pl_full[i].z - pl_full[i-1].z) > 1e-7))
-          && (pl_full[i].x * pl_full[i].x + pl_full[i].y * pl_full[i].y + pl_full[i].z * pl_full[i].z > 0.01f))
-      {
-        pl_surf->push_back(pl_full[i]);
-      }
-    }
+//       if(((abs(pl_full[i].x - pl_full[i-1].x) > 1e-7) 
+//           || (abs(pl_full[i].y - pl_full[i-1].y) > 1e-7)
+//           || (abs(pl_full[i].z - pl_full[i-1].z) > 1e-7))
+//           && (pl_full[i].x * pl_full[i].x + pl_full[i].y * pl_full[i].y + pl_full[i].z * pl_full[i].z > 0.01f))
+//       {
+//         pl_surf->push_back(pl_full[i]);
+//       }
+//     }
 
-}
+// }
 #endif
 void standard_msg_handler(const sensor_msgs::PointCloud2ConstPtr &msg, pcl::PointCloud<pcl::PointXYZ>::Ptr &pl_surf)
 {

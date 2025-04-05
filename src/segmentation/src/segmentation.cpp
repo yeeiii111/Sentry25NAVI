@@ -2,14 +2,17 @@
 #include "segmentation/utility.hpp"
 #include <pcl/filters/passthrough.h>
 #include <pcl/common/transforms.h>
-
+#include <pcl/filters/crop_box.h>
+#include <pcl/filters/conditional_removal.h>
 Obstacle_detector::Obstacle_detector():
     prior_map (new pcl::PointCloud<pcl::PointXYZ>),
     filtered_prior_map (new pcl::PointCloud<pcl::PointXYZ>),
     obstacle (new pcl::PointCloud<pcl::PointXYZ>),
     scan_sensor (new pcl::PointCloud<pcl::PointXYZ>),
     scan_map (new pcl::PointCloud<pcl::PointXYZ>),
-    last_scan_sensor(new pcl::PointCloud<pcl::PointXYZ>){
+    last_scan_sensor(new pcl::PointCloud<pcl::PointXYZ>),
+    cropped_scan(new pcl::PointCloud<pcl::PointXYZ>),
+    cropped_map(new pcl::PointCloud<pcl::PointXYZ>){
     ros::NodeHandle nh("~");
     nh.param<double>("distance_threshold", distance_threshold, 0.2);
     nh.param<std::string>("map_path", map_path, "");
@@ -19,11 +22,13 @@ Obstacle_detector::Obstacle_detector():
     nh.param<std::vector<double>>("IMU_extrinsic_T", IMU_extrinT, std::vector<double>());
     nh.param<std::vector<double>>("IMU_extrinsic_R", IMU_extrinR, std::vector<double>());
     nh.param<double>("leaf_size", leaf_size, 0.05);
+    nh.param<float>("box_size", box_size, 1.5);
     nh.param<bool>("prior_map_pub_en", prior_map_pub_en, 0);
     nh.param<bool>("use_livox_cloud",use_livox_cloud, 0);
     nh.param<double>("diverge_threshold",diverge_threshold,0.5);
     nh.param<double>("lidar_height",lidar_height,0.145);
     nh.param<double>("lidar_roll",lidar_roll,-0.349);
+    nh.param<double>("lidar_y",lidar_y,0.11);
     nh.param<bool>("debug_en",debug_en,0);
     nh.param<bool>("use_stl_cloud", use_stl_cloud, false);
     Eigen::Vector3d translation(extrinT.data());
@@ -50,7 +55,7 @@ Obstacle_detector::Obstacle_detector():
     //-------------------------------livox_cloud or standard cloud-------------------------------//
     if(use_livox_cloud == 1)
     {
-        scan_sub = nh.subscribe("/livox/lidar",5,&Obstacle_detector::Livox_Scan_Callback,this);
+        // scan_sub = nh.subscribe("/livox/lidar",5,&Obstacle_detector::Livox_Scan_Callback,this);
     }
     else{
         scan_sub = nh.subscribe("/cloud_registered",5,&Obstacle_detector::Standard_Scan_Callback,this);
@@ -73,6 +78,7 @@ Obstacle_detector::Obstacle_detector():
         Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitX());
         T_map_vice_map.linear() = roll.toRotationMatrix();
         T_map_vice_map.translation().z() = lidar_height;
+        T_map_vice_map.translation().y() = lidar_y;
         pcl::transformPointCloud(*prior_map, *prior_map, T_map_vice_map);
     }
     //方便KDtree有序存储
@@ -81,16 +87,53 @@ Obstacle_detector::Obstacle_detector():
     downsample.setLeafSize(leaf_size,leaf_size,leaf_size);
     downsample.filter(*filtered_prior_map);
     kdtree.setInputCloud(filtered_prior_map);
-    std::cout<<filtered_prior_map->size()<<std::endl;
+    box_center.x() = 0; 
+    box_center.y() = 0;
+    box_center.z() = 0;
+
+}
+void Obstacle_detector::cloud_crop(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, Eigen::Vector3d pos, float box_size, pcl::PointCloud<pcl::PointXYZ>::Ptr &result){
+    //crop_box很蛊，放弃
+    // pcl::CropBox<pcl::PointXYZ> box;
+    std::cout << "in cloud size " << cloud->size() << std::endl;
+    // box.setInputCloud(cloud);  // 输入点云
+    // box.setMin(Eigen::Vector4f(pos.x() - box_size, pos.y() - box_size, pos.z()-box_size, 1.0));  // 立方体最小角点
+    // box.setMax(Eigen::Vector4f(pos.x() + box_size, pos.y() + box_size, pos.z()+box_size, 1.0));    // 立方体最大角点
+    // box.setRotation(Eigen::Vector3f::Identity());
+    // box.setTranslation(Eigen::Vector3f::Identity());
+    // box.setMin(Eigen::Vector4f(-box_size,  -box_size, -box_size, 1.0));  // 立方体最小角点
+    // box.setMax(Eigen::Vector4f(box_size,  box_size, box_size, 1.0));    // 立方体最大角点
+    // box.filter(*result);
+    float x_min = pos.x()-box_size;
+    float x_max = pos.x() + box_size;
+    float y_min = pos.y()-box_size;
+    float y_max = pos.y() + box_size;
+    float z_min = pos.z()-box_size;
+    float z_max = pos.z() + box_size;
+    pcl::ConditionAnd<pcl::PointXYZ>::Ptr cond(new pcl::ConditionAnd<pcl::PointXYZ>);
+    cond->addComparison(pcl::FieldComparison<pcl::PointXYZ>::ConstPtr(new pcl::FieldComparison<pcl::PointXYZ>("x", pcl::ComparisonOps::GT, x_min)));
+    cond->addComparison(pcl::FieldComparison<pcl::PointXYZ>::ConstPtr(new pcl::FieldComparison<pcl::PointXYZ>("x", pcl::ComparisonOps::LT, x_max)));
+    cond->addComparison(pcl::FieldComparison<pcl::PointXYZ>::ConstPtr(new pcl::FieldComparison<pcl::PointXYZ>("y", pcl::ComparisonOps::GT, y_min)));
+    cond->addComparison(pcl::FieldComparison<pcl::PointXYZ>::ConstPtr(new pcl::FieldComparison<pcl::PointXYZ>("y", pcl::ComparisonOps::LT, y_max)));   
+    cond->addComparison(pcl::FieldComparison<pcl::PointXYZ>::ConstPtr(new pcl::FieldComparison<pcl::PointXYZ>("z", pcl::ComparisonOps::GT, z_min)));
+    cond->addComparison(pcl::FieldComparison<pcl::PointXYZ>::ConstPtr(new pcl::FieldComparison<pcl::PointXYZ>("z", pcl::ComparisonOps::LT, z_max)));
+    pcl::ConditionalRemoval<pcl::PointXYZ> cond_filter;
+    cond_filter.setInputCloud(cloud);
+    cond_filter.setCondition(cond);
+    cond_filter.filter(*result);     
+    std::cout << "cropped_cloud size " << result->size() << std::endl;
+
 }
 void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_map){
     auto start_time = std::chrono::high_resolution_clock::now();
-    pcl::PassThrough<pcl::PointXYZ> passTh;
-    passTh.setInputCloud(scan_map);                                                    // 输入原始点云
-    passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
-    passTh.setFilterLimits(-0.255, 2.2);                                               // 阈值范围
-    passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
-    passTh.filter(*scan_map); 
+    // pcl::PassThrough<pcl::PointXYZ> passTh;
+    // passTh.setInputCloud(scan_map);                                                    // 输入原始点云
+    // passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
+    // passTh.setFilterLimits(-0.255, 2.2);                                               // 阈值范围
+    // passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
+    // passTh.filter(*scan_map); 
+    std::cout << "detect_scan size " << scan_map->size() <<std::endl;
+    std::cout << "here" << std::endl;
     for (const auto& pt : scan_map->points){
         std::vector<int> indices(1);
         std::vector<float> sqr_distance(1);
@@ -127,20 +170,26 @@ void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_m
 void Obstacle_detector::timer(const ros::TimerEvent &event){
 
     obstacle->clear();
+    geometry_msgs::PoseStamped init_pose;
     geometry_msgs::PoseStamped robot_pose;
     if(use_livox_cloud == 1){
-        GetTargetPose(tf_listener,"map","base_link",robot_pose,last_scan_timestamp);
+        GetTargetPose(tf_listener,"map","base_link",init_pose,last_scan_timestamp);
     }
     else{
-        GetTargetPose(tf_listener,"map","odom",robot_pose,last_scan_timestamp);       
+        GetTargetPose(tf_listener,"map","odom",init_pose,last_scan_timestamp);       
     }
-    Eigen::Vector3d position(robot_pose.pose.position.x,
-                         robot_pose.pose.position.y,
-                         robot_pose.pose.position.z);
-    Eigen::Quaterniond orientation(robot_pose.pose.orientation.w,
-                               robot_pose.pose.orientation.x,
-                               robot_pose.pose.orientation.y,
-                               robot_pose.pose.orientation.z);
+    GetTargetPose(tf_listener,"map","base_link",robot_pose,last_scan_timestamp);
+    Eigen::Vector3d robot_position(
+                        robot_pose.pose.position.x,
+                        robot_pose.pose.position.y,
+                        robot_pose.pose.position.z);
+    Eigen::Vector3d position(init_pose.pose.position.x,
+                         init_pose.pose.position.y,
+                         init_pose.pose.position.z);
+    Eigen::Quaterniond orientation(init_pose.pose.orientation.w,
+                               init_pose.pose.orientation.x,
+                               init_pose.pose.orientation.y,
+                               init_pose.pose.orientation.z);
     orientation.normalize();
     //target 是 baselink--用原始点云 odom--用pointlio点云
     Eigen::Isometry3d T_map_target ;
@@ -159,33 +208,51 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
     if(scan_local->size()!=0)
     {
         pcl::transformPointCloud(*scan_local, *scan_map, T_map_sensor);
-        //registration(scan_map,filtered_prior_map,leaf_size);
-        detect(scan_map);
-        sensor_msgs::PointCloud2 obstacle_ros;
-        pcl::toROSMsg(*obstacle,obstacle_ros);
-        obstacle_ros.header.frame_id = "vice_map";
-        obstacle_ros.header.stamp = ros::Time::now();
-        obstacle_pub.publish(obstacle_ros);
+        if((abs(box_center.x() - robot_position.x()) > box_size) || (abs(box_center.y() - robot_position.y()) > box_size) )
+        {
+            box_center = robot_position;
+        }
+        cloud_crop(scan_map,box_center,box_size,cropped_scan);
+        cloud_crop(filtered_prior_map,box_center,box_size,cropped_map);
+        // cropped_map  = cloud_crop(filtered_prior_map,box_center,box_size);
+        // std::cout<< "box_center x " << box_center.x() << std::endl; 
+        // std::cout<< "box_center y " << box_center.y() << std::endl;        
+        // std::cout<< "box_center z " << box_center.z() << std::endl;        
+        // std::cout<< "box_center x - robot_position x " << box_center.x() - robot_position.x()<< std::endl; 
+        std::cout<< "box_size " << box_size << std::endl;
+        std::cout << "cropped_scan size " << cropped_scan->size() << std::endl;
+        std::cout << "cropped_map size " << cropped_map->size() << std::endl;
+        if(cropped_scan->size() != 0 && cropped_map->size() != 0)
+        {
+            registration(cropped_scan,cropped_map,leaf_size);
+            std::cout << "cropped_scan size " << cropped_scan->size() << std::endl;
+            detect(cropped_scan);
+            sensor_msgs::PointCloud2 obstacle_ros;
+            pcl::toROSMsg(*obstacle,obstacle_ros);
+            obstacle_ros.header.frame_id = "map";
+            obstacle_ros.header.stamp = ros::Time::now();
+            obstacle_pub.publish(obstacle_ros);
 
-        diverge_pub.publish(diverge);
-        match_pub.publish(match);
+            diverge_pub.publish(diverge);
+            match_pub.publish(match);
+        }
     }        
     if(prior_map_pub_en)
     {
         sensor_msgs::PointCloud2 prior_map_ros;
-        pcl::toROSMsg(*filtered_prior_map,prior_map_ros);
-        prior_map_ros.header.frame_id = "vice_map";
+        pcl::toROSMsg(*cropped_map,prior_map_ros);
+        prior_map_ros.header.frame_id = "map";
         prior_map_pub.publish(prior_map_ros);
     }
 }
 
-void Obstacle_detector::Livox_Scan_Callback(const livox_ros_driver2::CustomMsg::ConstPtr &msg){
-    std::lock_guard<std::mutex> lock(scan_mutex);
-    *last_scan_sensor = *scan_sensor;    
-    livox_msg_handler(msg , scan_sensor);//自动覆盖scan_sensor
-    last_scan_timestamp = scan_timestamp;  
-    scan_timestamp = msg->header.stamp;
-}
+// void Obstacle_detector::Livox_Scan_Callback(const livox_ros_driver2::CustomMsg::ConstPtr &msg){
+//     std::lock_guard<std::mutex> lock(scan_mutex);
+//     *last_scan_sensor = *scan_sensor;    
+//     livox_msg_handler(msg , scan_sensor);//自动覆盖scan_sensor
+//     last_scan_timestamp = scan_timestamp;  
+//     scan_timestamp = msg->header.stamp;
+// }
 void Obstacle_detector::Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg)
 {
     std::lock_guard<std::mutex> lock(scan_mutex);

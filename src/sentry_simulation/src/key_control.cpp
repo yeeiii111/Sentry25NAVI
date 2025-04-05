@@ -67,13 +67,13 @@ void scanAndPublish() {
             break;
         case 'a':
         case 'A':
-            cmd_vel.angular.z = 1.5;
+            cmd_vel.angular.z = 5;
             cmd_vel.linear.x = 0;
             key_command = 0;
             break;
         case 'd':
         case 'D':
-            cmd_vel.angular.z = -1.5;
+            cmd_vel.angular.z = -5;
             cmd_vel.linear.x = 0;
             key_command = 0;
             break;

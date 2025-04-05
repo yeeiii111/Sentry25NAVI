@@ -44,7 +44,7 @@ void Controller::Plan(const ros::TimerEvent& event){
             cmd_vel.linear.x = 0;
             cmd_vel.linear.y = 0;
             cmd_vel.linear.z = 0;
-            cmd_vel.angular.z = 0;
+            cmd_vel.angular.z = set_yaw_speed;
             cmd_vel_pub.publish(cmd_vel);
             std::cout << cmd_vel.linear.z << std::endl;
             ROS_INFO("Planning Success!");
@@ -101,7 +101,7 @@ void Controller::Plan(const ros::TimerEvent& event){
         geometry_msgs::Twist cmd_vel;
             cmd_vel.linear.x = 0;
             cmd_vel.linear.y = 0;
-            cmd_vel.angular.z = set_yaw_speed;
+            cmd_vel.angular.z = 0;
             cmd_vel.linear.z = 0;   // bool success or not
             cmd_vel_pub.publish(cmd_vel);
             if(debug_en){

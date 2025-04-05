@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(segmentation)
+# 强制设置构建类型为 Release
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 
+# 禁用 PCL 的 SSE 优化
+set(PCL_ENABLE_SSE FALSE CACHE BOOL "Disable SSE in PCL" FORCE)
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 set(CMAKE_CXX_STANDARD 17)
@@ -9,16 +13,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-list(INSERT CMAKE_PREFIX_PATH 0 "/usr")
-set(PCL_DIR "/usr/lib/x86_64-linux-gnu/cmake/pcl")
+list(INSERT CMAKE_PREFIX_PATH 0 "/home/tjurm/MylibInstall/pcl-1.11.0")
+set(PCL_ROOT "/home/tjurm/MylibInstall/pcl-1.11.0")
+set(PCL_DIR "/home/tjurm/MylibInstall/pcl-1.11.0/share/pcl-1.11")
 find_package(catkin REQUIRED COMPONENTS
   tf
   roscpp
   rospy
-  livox_ros_driver2
 )
 
-find_package(PCL 1.10 REQUIRED COMPONENTS common kdtree io filters )
+find_package(PCL 1.11 REQUIRED COMPONENTS common kdtree io filters )
 find_package(OpenMP REQUIRED)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -159,6 +163,8 @@ target_link_libraries(segmentation
   PUBLIC OpenMP::OpenMP_CXX
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+  /home/tjurm/MylibInstall/pcl-1.11.0/lib/libpcl_filters.so
+  /home/tjurm/MylibInstall/pcl-1.11.0/lib/libpcl_common.so
  
 )
 
