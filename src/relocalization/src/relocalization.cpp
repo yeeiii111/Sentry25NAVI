@@ -335,25 +335,6 @@ void Relocalization::compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &i
         ROS_ERROR("FPFH feature search failed!");
     }    
 }
-pcl::PointCloud<pcl::PointXYZ> Relocalization::ISS_compute(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud,
-                                            pcl::search::KdTree<pcl::PointXYZ>::Ptr &tree)
-{
-    pcl::PointCloud<pcl::PointXYZ>::Ptr keypoints(new pcl::PointCloud<pcl::PointXYZ>());
-    est_iss.setInputCloud(input_cloud);
-    est_iss.setSearchMethod(tree);
-    est_iss.setSalientRadius(0.5f);//设置用于计算协方差矩阵的球邻域半径
-    est_iss.setNonMaxRadius(0.3f);//设置非极大值抑制应用算法的半径
-    est_iss.setThreshold21(0.65); //设定第二个和第一个特征值之比的上限
-    est_iss.setThreshold32(0.5);  //设定第三个和第二个特征值之比的上限
-    est_iss.setMinNeighbors(5); //在应用非极大值抑制算法时，设置必须找到的最小邻居数
-    est_iss.setNumberOfThreads(4); //初始化调度器并设置要使用的线程数
-    est_iss.compute(*keypoints);
-    if (keypoints->empty()) {
-        ROS_WARN("No ISS keypoints found in input cloud.");
-    }
-    else std::cout << "ISS keypoints size:"<<keypoints->size() << std::endl;
-    return *keypoints;
-}
 pcl::PointCloud<pcl::PointXYZ> Relocalization::sac_ia_compute(pcl::PointCloud<pcl::PointXYZ>::Ptr source_cloud,
                                                                 pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud)
 {

@@ -12,7 +12,10 @@ Obstacle_detector::Obstacle_detector():
     scan_map (new pcl::PointCloud<pcl::PointXYZ>),
     last_scan_sensor(new pcl::PointCloud<pcl::PointXYZ>),
     cropped_scan(new pcl::PointCloud<pcl::PointXYZ>),
-    cropped_map(new pcl::PointCloud<pcl::PointXYZ>){
+    cropped_map(new pcl::PointCloud<pcl::PointXYZ>),
+    previous_icp_result(Eigen::Isometry3d::Identity()){
+        
+    register_ = std::make_shared<small_gicp::Registration<small_gicp::GICPFactor, small_gicp::ParallelReductionOMP>>();
     ros::NodeHandle nh("~");
     nh.param<double>("distance_threshold", distance_threshold, 0.2);
     nh.param<std::string>("map_path", map_path, "");
@@ -31,6 +34,11 @@ Obstacle_detector::Obstacle_detector():
     nh.param<double>("lidar_y",lidar_y,0.11);
     nh.param<bool>("debug_en",debug_en,0);
     nh.param<bool>("use_stl_cloud", use_stl_cloud, false);
+    nh.param<double>("max_dist_sq",max_dist_sq,1);
+    nh.param<double>("max_iterations",max_iterations,100);
+    register_->reduction.num_threads = 4;
+    register_->rejector.max_dist_sq = max_dist_sq;
+    register_->optimizer.max_iterations = max_iterations;
     Eigen::Vector3d translation(extrinT.data());
     Eigen::Matrix3d rotation;
     rotation << extrinR[0],extrinR[1],extrinR[2],
@@ -64,6 +72,7 @@ Obstacle_detector::Obstacle_detector():
     match_pub = nh.advertise<std_msgs::Bool>("/match",10);
     obstacle_pub = nh.advertise<sensor_msgs::PointCloud2>("obstacle",10);
     prior_map_pub = nh.advertise<sensor_msgs::PointCloud2>("prior_map",10);
+    aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("alignen",10);
     tf_listener = std::make_shared<tf::TransformListener>();
     run_timer = nh.createTimer(ros::Duration(1.0/freq),&Obstacle_detector::timer,this);
     if(pcl::io::loadPCDFile<pcl::PointXYZ>(map_path,*prior_map) == -1)
@@ -90,6 +99,7 @@ Obstacle_detector::Obstacle_detector():
     box_center.x() = 0; 
     box_center.y() = 0;
     box_center.z() = 0;
+    cloud_crop(filtered_prior_map,box_center,box_size,cropped_map);
 
 }
 void Obstacle_detector::cloud_crop(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, Eigen::Vector3d pos, float box_size, pcl::PointCloud<pcl::PointXYZ>::Ptr &result){
@@ -211,22 +221,50 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
         if((abs(box_center.x() - robot_position.x()) > box_size) || (abs(box_center.y() - robot_position.y()) > box_size) )
         {
             box_center = robot_position;
+            cloud_crop(filtered_prior_map,box_center,box_size,cropped_map);
         }
         cloud_crop(scan_map,box_center,box_size,cropped_scan);
-        cloud_crop(filtered_prior_map,box_center,box_size,cropped_map);
         // cropped_map  = cloud_crop(filtered_prior_map,box_center,box_size);
         // std::cout<< "box_center x " << box_center.x() << std::endl; 
         // std::cout<< "box_center y " << box_center.y() << std::endl;        
         // std::cout<< "box_center z " << box_center.z() << std::endl;        
         // std::cout<< "box_center x - robot_position x " << box_center.x() - robot_position.x()<< std::endl; 
-        std::cout<< "box_size " << box_size << std::endl;
-        std::cout << "cropped_scan size " << cropped_scan->size() << std::endl;
-        std::cout << "cropped_map size " << cropped_map->size() << std::endl;
+        // std::cout<< "box_size " << box_size << std::endl;
+        // std::cout << "cropped_scan size " << cropped_scan->size() << std::endl;
+        // std::cout << "cropped_map size " << cropped_map->size() << std::endl;
         if(cropped_scan->size() != 0 && cropped_map->size() != 0)
         {
-            registration(cropped_scan,cropped_map,leaf_size);
+            // registration(cropped_scan,cropped_map,leaf_size);
+            auto start_time = std::chrono::high_resolution_clock::now();
+            target_cov = small_gicp::voxelgrid_sampling_omp<pcl::PointCloud<pcl::PointXYZ>,pcl::PointCloud<pcl::PointCovariance>>(*cropped_map ,leaf_size, 4);
+            small_gicp::estimate_covariances_omp(*target_cov,2, 4);
+            target_tree = std::make_shared<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>>(
+                        target_cov, small_gicp::KdTreeBuilderOMP(4));
+            source_cov = small_gicp::voxelgrid_sampling_omp<
+            pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::PointCovariance>>(*cropped_scan, leaf_size , 4);
+            small_gicp::estimate_covariances_omp(*source_cov, 2, 4);
+            source_tree = std::make_shared<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>>(
+            source_cov, small_gicp::KdTreeBuilderOMP(4));
+            auto mid_time = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double, std::milli> duration_mid = mid_time - start_time;
+            std::cout << "downsample function took " << duration_mid.count() << " milliseconds" << std::endl;
+            small_gicp::RegistrationResult result;
+            result = register_->align(*target_cov,*source_cov,*target_tree,previous_icp_result);
+            Eigen::Affine3d T (result.T_target_source);
+            pcl::transformPointCloud(*cropped_scan,*cropped_scan,T);
+            auto end_time = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double, std::milli> duration = end_time - start_time;
+            std::cout<<"error = "<<result.error<<std::endl;
+            std::cout << "registration function took " << duration.count() << " milliseconds" << std::endl;
+
             std::cout << "cropped_scan size " << cropped_scan->size() << std::endl;
-            detect(cropped_scan);
+            sensor_msgs::PointCloud2 aligned_ros;
+            pcl::toROSMsg(*cropped_scan,aligned_ros);
+            aligned_ros.header.frame_id = "map";
+            aligned_ros.header.stamp = ros::Time::now();
+            aligned_pub.publish(aligned_ros);
+            if(result.error < 2)
+                detect(cropped_scan);
             sensor_msgs::PointCloud2 obstacle_ros;
             pcl::toROSMsg(*obstacle,obstacle_ros);
             obstacle_ros.header.frame_id = "map";

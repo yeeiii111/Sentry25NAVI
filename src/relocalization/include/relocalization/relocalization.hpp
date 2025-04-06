@@ -43,8 +43,6 @@ public:
     void compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud, 
                             pcl::search::KdTree<pcl::PointXYZ>::Ptr &tree,
                             pcl::PointCloud<pcl::FPFHSignature33>::Ptr &fpfh);
-    pcl::PointCloud<pcl::PointXYZ> ISS_compute(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud,
-                                                pcl::search::KdTree<pcl::PointXYZ>::Ptr &tree);
     pcl::PointCloud<pcl::PointXYZ> sac_ia_compute(pcl::PointCloud<pcl::PointXYZ>::Ptr source_cloud, 
                                                 pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud);
 private:
@@ -108,6 +106,48 @@ private:
     pcl::PointCloud<pcl::Normal>::Ptr           point_normal;
     pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> est_normal;
     pcl::FPFHEstimationOMP<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> est_fpfh;
-    pcl::ISSKeypoint3D<pcl::PointXYZ, pcl::PointXYZ> est_iss;
+
+};
+
+class Registration{
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    public:
+    Registration();
+    ~Registration() = default;
+    void registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, double leaf_size);
+    void compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud, 
+                            pcl::search::KdTree<pcl::PointXYZ>::Ptr &tree,
+                            pcl::PointCloud<pcl::FPFHSignature33>::Ptr &fpfh);
+    pcl::PointCloud<pcl::PointXYZ> sac_ia_compute(pcl::PointCloud<pcl::PointXYZ>::Ptr source_cloud, 
+                                                pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud);
+private:
+
+    int                                         num_threads;
+    int                                         num_neighbors;
+    double                                      leaf_size;
+    double                                      map_leaf_size;
+    double                                      max_dist_sq;
+    double                                      max_iterations;
+    std::string                                 pcd_path;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr         scan;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr         scan_odom;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr         aligned;  
+    pcl::PointCloud<pcl::PointXYZ>::Ptr         prior_map;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr         high_features_map;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr         high_features_scan;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr         filtered_prior_map;
+    pcl::PointCloud<pcl::PointCovariance>::Ptr  source_cov;
+    pcl::PointCloud<pcl::PointCovariance>::Ptr  target_cov;
+    pcl::PointCloud<pcl::FPFHSignature33>::Ptr  source_fpfh;
+    pcl::PointCloud<pcl::FPFHSignature33>::Ptr  target_fpfh;
+    std::shared_ptr<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>> target_tree;
+    std::shared_ptr<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>> source_tree;
+    std::shared_ptr<small_gicp::Registration<small_gicp::GICPFactor,small_gicp::ParallelReductionOMP>> register_;
+    geometry_msgs::TransformStamped             T_vice_map_odom;
+    Eigen::Isometry3d                           previous_icp_result;
+    Eigen::Isometry3d                           fpfh_result;
+    pcl::PointCloud<pcl::Normal>::Ptr           point_normal;
+    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> est_normal;
+    pcl::FPFHEstimationOMP<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> est_fpfh;
 
 };

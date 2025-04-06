@@ -1,7 +1,7 @@
 <launch>
     <node pkg="segmentation" type="segmentation" name="detector" output="screen" >
     <rosparam command="load" file="$(find segmentation)/config/extrinsic.yaml" />
-    <param name="map_path" type="string" value="/home/tjurm/navi_ws/Sentry25NAVI/src/Point-LIO-master/PCD/rmul_2025-20.pcd"/> 
+    <param name="map_path" type="string" value="/home/tjurm/navi_ws/Sentry25NAVI/src/Point-LIO-master/PCD/2floor.pcd"/> 
     <param name="freq" type="int" value="20"/> 
     <param name="distance_threshold" type="double" value="0.2"/> 
     <param name="leaf_size" type="double" value="0.05"/>
@@ -15,6 +15,9 @@
     <param name="lidar_y" type="double" value="0.11"/>
     <param name="lidar_roll" type="double" value="-0.349"/>
     <param name="box_size" type="double" value="2.5"/>
+    <param name="max_dist_sq" value="2.0"/>
+    <param name="num_threads" value="8"/>
+    <param name="max_iterations" value="50"/>
     </node>
 </launch>
 

@@ -12,6 +12,13 @@
 #include <tf/transform_listener.h>
 #include"geometry_msgs/Twist.h"
 #include <sensor_msgs/PointCloud2.h>
+#include "small_gicp/ann/kdtree_omp.hpp"
+#include "small_gicp/factors/gicp_factor.hpp"
+#include "small_gicp/pcl/pcl_point.hpp"
+#include "small_gicp/util/downsampling_omp.hpp"
+#include "small_gicp/registration/reduction_omp.hpp"
+#include "small_gicp/registration/registration.hpp"
+#include "small_gicp/pcl/pcl_registration.hpp"
 // #include "livox_ros_driver2/CustomMsg.h"
 class Obstacle_detector{
 public:
@@ -32,7 +39,9 @@ private:
     double                                          lidar_height;
     double                                          lidar_roll;
     double                                          lidar_y;
-    float                                          box_size;
+    double                                          max_dist_sq;
+    double                                          max_iterations;
+    float                                           box_size;
     int                                             min_diverge_num;
     int                                             freq;
     bool                                            use_stl_cloud;
@@ -56,9 +65,17 @@ private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr             scan_map;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             cropped_scan;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             cropped_map;
+    pcl::PointCloud<pcl::PointCovariance>::Ptr      source_cov;
+    pcl::PointCloud<pcl::PointCovariance>::Ptr      target_cov;
+    std::shared_ptr<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>> target_tree;
+    std::shared_ptr<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>> source_tree;
+    std::shared_ptr<small_gicp::Registration<small_gicp::GICPFactor,small_gicp::ParallelReductionOMP>> register_;
+    Eigen::Isometry3d                           previous_icp_result;
+
     std::shared_ptr<tf::TransformListener>          tf_listener;
     ros::Publisher                                  obstacle_pub;
     ros::Publisher                                  prior_map_pub;
+    ros::Publisher                                  aligned_pub;
     ros::Publisher                                  diverge_pub;
     ros::Publisher                                  match_pub;//点云匹配上一定match，没匹配上可能是里程计退化也可能只是瞬间角速度太大，所以用两个标志位描述定位状态
     ros::Subscriber                                 scan_sub;
