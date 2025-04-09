@@ -30,7 +30,7 @@ struct serial_send_msg
     uint8_t header;
     float   v_x;
     float   v_y;
-    float   v_z;
+    float   v_z;//0可以不跟随云台；1跟随云台；2抵达目的地，大yaw可由自瞄停下
     float   w_z;
     uint8_t tailer;
 }__attribute__((packed));

@@ -16,6 +16,7 @@ Panels:
         - /Path3
         - /Axes3
         - /Axes4
+        - /GridCells1
       Splitter Ratio: 0.5
     Tree Height: 439
   - Class: rviz/Selection
@@ -35,7 +36,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: PointCloud2
+    SyncSource: ""
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -245,6 +246,15 @@ Visualization Manager:
       Reference Frame: body
       Show Trail: false
       Value: false
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 239; 41; 41
+      Enabled: true
+      Name: GridCells
+      Queue Size: 10
+      Topic: /controller/obstacle_grids
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -273,7 +283,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 9.002981185913086
+      Distance: 19.90272331237793
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -289,9 +299,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.8897974491119385
+      Pitch: 0.9647973775863647
       Target Frame: <Fixed Frame>
-      Yaw: 6.1704630851745605
+      Yaw: 5.140460968017578
     Saved: ~
 Window Geometry:
   Displays:

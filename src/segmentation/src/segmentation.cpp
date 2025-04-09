@@ -72,7 +72,7 @@ Obstacle_detector::Obstacle_detector():
     match_pub = nh.advertise<std_msgs::Bool>("/match",10);
     obstacle_pub = nh.advertise<sensor_msgs::PointCloud2>("obstacle",10);
     prior_map_pub = nh.advertise<sensor_msgs::PointCloud2>("prior_map",10);
-    aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("alignen",10);
+    aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("aligned",10);
     tf_listener = std::make_shared<tf::TransformListener>();
     run_timer = nh.createTimer(ros::Duration(1.0/freq),&Obstacle_detector::timer,this);
     if(pcl::io::loadPCDFile<pcl::PointXYZ>(map_path,*prior_map) == -1)
@@ -263,7 +263,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
             aligned_ros.header.frame_id = "map";
             aligned_ros.header.stamp = ros::Time::now();
             aligned_pub.publish(aligned_ros);
-            if(result.error < 2)
+            if(result.error < 5)
                 detect(cropped_scan);
             sensor_msgs::PointCloud2 obstacle_ros;
             pcl::toROSMsg(*obstacle,obstacle_ros);
