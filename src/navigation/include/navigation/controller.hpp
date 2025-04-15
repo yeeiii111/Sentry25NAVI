@@ -49,6 +49,7 @@ public:
     void Plan(const ros::TimerEvent& event);
     double YawErrorCal(const geometry_msgs::PoseStamped& robot_pose,
                     const geometry_msgs::PoseStamped& path_pose);
+    double CurvatureCal(const nav_msgs::Path& traj);
 private:
     ros::Publisher cmd_vel_pub;
     ros::Publisher local_path_pub;
@@ -61,9 +62,9 @@ private:
     ros::Timer      plan_timer;
 
     std::shared_ptr<tf::TransformListener> tf_listener;
-
     nav_msgs::OccupancyGrid costmap;
     nav_msgs::Path global_path;
+    bool narrow = false;
     bool diverge = false;
     bool plan = false;
     bool turn_state = false;
@@ -81,6 +82,7 @@ private:
     double wz_d_value;
     double wz_const;
     double last_yaw_error;
+    double curvature;
     int straight_foresee_index;
     int curve_foresee_index;   
     int plan_freq;

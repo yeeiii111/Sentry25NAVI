@@ -58,11 +58,64 @@ void Controller::Plan(const ros::TimerEvent& event){
             prune_index = 0;
             return;
         }
-        //朝向与前进方向相差过大时要先调整雷达方向
-        else if((EuclideanDistance > turn_tolerance && abs(YawErrorCal(robot_pose,global_path.poses[prune_index+5])) > M_PI/2) || turn_state)
+        //找到最近点，生成prune path，平滑得到local_path,计算曲率，高曲率处不计算forsee_path,低曲率处计算并判断是否狭窄，判断是否需要原地调整方向，
+        //进入follow_traj
+        FindNearstPose(robot_pose,global_path,prune_index, prune_ahead_dist);
+        // std::cout<< "global_path size:" << global_path.poses.size() << std::endl;
+        nav_msgs::Path prune_path, local_path, forsee_path;
+
+        prune_path.header.frame_id = global_frame;
+        prune_path.poses.push_back(robot_pose);
+
+        int j = prune_index;
+        while(j < global_path.poses.size() && j - prune_index < 20){
+            prune_path.poses.push_back(global_path.poses[j]);
+            j++;
+        }
+        //此处，原GenTraj函数有时会在local path中加入Nan点，导致后续错误，删除这些点有时会导致路经平滑失败，即localpath为空
+        GenTraj(prune_path, local_path);
+        local_path.header.frame_id = "map";
+        local_path_pub.publish(prune_path);
+
+        curvature = CurvatureCal(prune_path);
+        if(curvature < 1)
         {
-            double error = YawErrorCal(robot_pose,global_path.poses[prune_index+5]);
-            if(abs(error) < M_PI/6 ){
+            forsee_path.header.frame_id = global_frame;
+            forsee_path.poses.push_back(robot_pose);
+            int i = prune_index;
+            while(i < global_path.poses.size() && i - prune_index < forsee_index){
+                forsee_path.poses.push_back(global_path.poses[i]);
+                i++;
+            }
+            forsee_path_pub.publish(forsee_path);
+            if(!Passbility_check(costmap,forsee_path,search_radius,narrow_threshold, obstacle_result))
+            {
+                narrow = true;
+                if((abs(YawErrorCal(robot_pose,prune_path.poses[5])) > M_PI/36) )
+                    turn_state = true;
+            }   
+            else
+            {
+                narrow = false;
+            }   
+            publishObstaclesGrid(obstacle_result, costmap.info.resolution);
+        }
+        else 
+        {
+            forsee_path.header.frame_id = global_frame;
+            forsee_path.poses.clear();
+            forsee_path_pub.publish(forsee_path);
+            narrow = false;
+        }
+        //朝向与前进方向相差过大时要先调整雷达方向
+        if((abs(YawErrorCal(robot_pose,prune_path.poses[5])) > M_PI/2) || turn_state)
+        {
+            double error = YawErrorCal(robot_pose,prune_path.poses[5]);
+            if(abs(error) < M_PI/6 && (!narrow)){
+                turn_state = false;
+                return;
+            }
+            else if(abs(error) < M_PI/40 && (narrow)){
                 turn_state = false;
                 return;
             }
@@ -71,52 +124,23 @@ void Controller::Plan(const ros::TimerEvent& event){
             cmd_vel.linear.x = 0;
             cmd_vel.linear.y = 0;
             cmd_vel.linear.z = 0;
-            cmd_vel.angular.z = signum(error) * wz_const;
+            cmd_vel.angular.z = error * wz_p_value + (error - last_yaw_error)* wz_d_value;
             cmd_vel_pub.publish(cmd_vel);
+            last_yaw_error = error;
             ROS_INFO("Turnning attitude!");
             std::cout << "yaw error = " << error << std::endl;
             return;
         }
-        
-        FindNearstPose(robot_pose,global_path,prune_index, prune_ahead_dist);
-        // std::cout<< "global_path size:" << global_path.poses.size() << std::endl;
-        nav_msgs::Path prune_path, local_path, forsee_path;
-
-        prune_path.header.frame_id = global_frame;
-        prune_path.poses.push_back(robot_pose);
-
-        forsee_path.header.frame_id = global_frame;
-        forsee_path.poses.push_back(robot_pose);
-        int i = prune_index;
-        while(i < global_path.poses.size() && i - prune_index < forsee_index){
-            forsee_path.poses.push_back(global_path.poses[i]);
-            i++;
-        }
-        forsee_path_pub.publish(forsee_path);
-
-        int j = prune_index;
-        while(j < global_path.poses.size() && j - prune_index < 20){
-            prune_path.poses.push_back(global_path.poses[j]);
-            j++;
-        }
-        geometry_msgs::Twist cmd_vel;
-        if(!Passbility_check(costmap,forsee_path,search_radius,narrow_threshold, obstacle_result))
-            cmd_vel.linear.z = 0;//note
-        else
-            cmd_vel.linear.z = 0;
-        publishObstaclesGrid(obstacle_result, costmap.info.resolution);
-        //此处，原GenTraj函数有时会在local path中加入Nan点，导致后续错误，删除这些点有时会导致路经平滑失败，即localpath为空
-        GenTraj(prune_path, local_path);
-        local_path.header.frame_id = "map";
-        local_path_pub.publish(local_path);
-
-
         //平滑成功判断
-        if(local_path.poses.size() >=2)
-            FollowTraj(robot_pose, local_path, cmd_vel);
-        else
-            FollowTraj(robot_pose, prune_path, cmd_vel); 
-            
+        geometry_msgs::Twist cmd_vel;
+        // if(narrow || curvature > 2)
+        //     FollowTraj(robot_pose, global_path, cmd_vel);
+        // else if(local_path.poses.size() >=2)
+        //     FollowTraj(robot_pose, local_path, cmd_vel);
+        // else
+        //     FollowTraj(robot_pose, prune_path, cmd_vel); 
+        FollowTraj(robot_pose, prune_path, cmd_vel);
+        if(narrow) cmd_vel.linear.z = 2;
         cmd_vel_pub.publish(cmd_vel);
     }   
     else{
@@ -284,6 +308,15 @@ void Controller::FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs:
             prune_index = std::min(prune_index, (int)(path.poses.size()-1));
             std::cout << "prune_index = " << prune_index << std::endl;
         }
+double Controller::CurvatureCal(const nav_msgs::Path& traj){
+    double curvature;
+    if(3 < traj.poses.size())
+    {
+        curvature = computeCurvature(traj.poses[0],traj.poses[1],traj.poses[2]);
+    }
+    else curvature = 0;
+    return curvature;
+}
 void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
                             const nav_msgs::Path& traj,
                             geometry_msgs::Twist& cmd_vel){
@@ -301,12 +334,6 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
         //double diff_yaw = GetYawFromOrientation(traj.poses[0].pose.orientation)- GetYawFromOrientation(robot_pose.pose.orientation);
         int index;
         //曲率计算,高曲率的地方前视距离远一些
-        double curvature;
-        if(3 < traj.poses.size())
-        {
-            curvature = computeCurvature(traj.poses[0],traj.poses[1],traj.poses[2]);
-        }
-        else curvature = 0;
         if(curvature > 1) 
         {
             p_value = curve_p_value;
@@ -326,8 +353,6 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
         if(debug_en)
             std::cout << "curvature = "<<curvature <<std::endl;
         diff_yaw = anglelimit(diff_yaw);
-        // printf("diff_yaw: %f\n",diff_yaw);
-        // printf("diff_distance: %f\n",diff_distance);
 
         double vx_global = cos(diff_yaw)*diff_distance*p_value;//*diff_distance*p_value_;
         double vy_global = sin(diff_yaw)*diff_distance*p_value;//*diff_distance*p_value_;
@@ -339,10 +364,11 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
         }
 
 
-        double error = YawErrorCal(robot_pose,traj.poses[index]);
-        double wz = wz_p_value * error + wz_d_value*(error - last_yaw_error);
-        last_yaw_error = error;
-        cmd_vel.angular.z = wz;
+        // double error = YawErrorCal(robot_pose,traj.poses[index]);
+        // double wz = wz_p_value * error + wz_d_value*(error - last_yaw_error);
+        // last_yaw_error = error;
+        double wz = 0;
+        cmd_vel.angular.z = 0;
         //对旋转的补偿，匀速旋转是，实际走过的是一段圆弧
         double yaw_calibrated = anglelimit(yaw - wz / (plan_freq *2)) ;
         // std::cout<<"yaw_error  "<<error<<"   wz   "<< wz <<std::endl;
