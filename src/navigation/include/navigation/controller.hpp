@@ -35,7 +35,6 @@ public:
     ~Controller();
     void GlobalPathCallback(const nav_msgs::PathConstPtr & msg);
     void CostmapCallback(const nav_msgs::OccupancyGridConstPtr & msg);
-    void DivergeCallback(const std_msgs::BoolConstPtr &msg);
     void MatchCallback(const std_msgs::BoolConstPtr &msg);
     void FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs::Path& path, int& prune_index, double prune_ahead_dist);
     void FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
@@ -44,17 +43,26 @@ public:
     bool world2Grid(double wx, double wy, 
                     const nav_msgs::OccupancyGrid& costmap, 
                     int& gx, int& gy);
-    bool Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Path &plan, double search_radius, int threshold, std::vector<ObstacleResult> &result);
-    void publishObstaclesGrid(const std::vector<ObstacleResult>& obstacles, double resolution);
+    bool Grid2world(int gx, int gy, const nav_msgs::OccupancyGrid& costmap,
+                    double& wx, double& wy);
+    bool Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Path &plan, nav_msgs::Path& optimized_path, double search_radius, int threshold, 
+                          std::vector<ObstacleResult> &result_l, std::vector<ObstacleResult> &result_r);
+    void publishObstaclesGrid(const std::vector<ObstacleResult>& obstacles, double resolution, ros::Publisher& pub);
     void Plan(const ros::TimerEvent& event);
     double YawErrorCal(const geometry_msgs::PoseStamped& robot_pose,
-                    const geometry_msgs::PoseStamped& path_pose);
+                      const geometry_msgs::PoseStamped& path_pose);
     double CurvatureCal(const nav_msgs::Path& traj);
+    double YawControl(const geometry_msgs::PoseStamped& robot_pose,
+                      const geometry_msgs::PoseStamped& path_pose);
+    double YawControl(double error);
 private:
     ros::Publisher cmd_vel_pub;
+    ros::Publisher prune_path_pub;
     ros::Publisher local_path_pub;
     ros::Publisher forsee_path_pub;
-    ros::Publisher obstacle_pub;
+    ros::Publisher obstacle_pub_l;
+    ros::Publisher obstacle_pub_r;
+    ros::Publisher followed_pose_pub;
     ros::Subscriber diverge_sub;
     ros::Subscriber match_sub;
     ros::Subscriber global_path_sub;
@@ -80,18 +88,17 @@ private:
     double curve_p_value;
     double wz_p_value;
     double wz_d_value;
-    double wz_const;
     double last_yaw_error;
     double curvature;
     int straight_foresee_index;
     int curve_foresee_index;   
     int plan_freq;
     double goal_dist_tolerance;
-    double turn_tolerance;
     double prune_ahead_dist;
 
     double yaw;
-    std::vector<ObstacleResult> obstacle_result;
+    std::vector<ObstacleResult> obstacle_result_l;
+    std::vector<ObstacleResult> obstacle_result_r;
     std::string global_frame;
 
 };   

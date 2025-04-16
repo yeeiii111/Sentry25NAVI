@@ -11,8 +11,6 @@ Controller::Controller()
     nh.param<double>("goal_dist_tolerance", goal_dist_tolerance, 0.2);
     nh.param<double>("prune_ahead_distance", prune_ahead_dist, 0.5);
     nh.param<std::string>("global_frame", global_frame, "map");
-    nh.param<double>("wz_const", wz_const, 0.5);
-    nh.param<double>("turn_tolerance",turn_tolerance,0.3);
     nh.param<bool>("debug_en", debug_en ,false);
     nh.param<int>("straight_foresee_index", straight_foresee_index, 1);
     nh.param<int>("curve_foresee_index", curve_foresee_index, 1);
@@ -21,9 +19,12 @@ Controller::Controller()
     nh.param<double>("search_radius", search_radius, 0.3);
     nh.param<double>("wz_p_value", wz_p_value, 1);
     nh.param<double>("wz_d_value", wz_d_value, 0.01);
+    prune_path_pub = nh.advertise<nav_msgs::Path>("prune_path",5);
+    followed_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("followed_path",5);
     local_path_pub = nh.advertise<nav_msgs::Path>("local_path",5);
     forsee_path_pub = nh.advertise<nav_msgs::Path>("forsee_path",5);
-    obstacle_pub = nh.advertise<nav_msgs::GridCells>("obstacle_grids",5);
+    obstacle_pub_l = nh.advertise<nav_msgs::GridCells>("obstacle_grids_l",5);
+    obstacle_pub_r = nh.advertise<nav_msgs::GridCells>("obstacle_grids_r",5);   
     global_path_sub = nh.subscribe("/move_base/GlobalPlanner/plan",5,&Controller::GlobalPathCallback,this);
     //diverge_sub = nh.subscribe("/diverge",5,&Controller::DivergeCallback,this);
     match_sub = nh.subscribe("/match",5,&Controller::MatchCallback,this);
@@ -61,23 +62,22 @@ void Controller::Plan(const ros::TimerEvent& event){
         //找到最近点，生成prune path，平滑得到local_path,计算曲率，高曲率处不计算forsee_path,低曲率处计算并判断是否狭窄，判断是否需要原地调整方向，
         //进入follow_traj
         FindNearstPose(robot_pose,global_path,prune_index, prune_ahead_dist);
-        // std::cout<< "global_path size:" << global_path.poses.size() << std::endl;
         nav_msgs::Path prune_path, local_path, forsee_path;
 
         prune_path.header.frame_id = global_frame;
         prune_path.poses.push_back(robot_pose);
-
         int j = prune_index;
         while(j < global_path.poses.size() && j - prune_index < 20){
             prune_path.poses.push_back(global_path.poses[j]);
             j++;
         }
+        prune_path_pub.publish(prune_path);
         //此处，原GenTraj函数有时会在local path中加入Nan点，导致后续错误，删除这些点有时会导致路经平滑失败，即localpath为空
-        GenTraj(prune_path, local_path);
+        //平滑得到的轨迹会过障碍，移除这个功能
         local_path.header.frame_id = "map";
-        local_path_pub.publish(prune_path);
 
         curvature = CurvatureCal(prune_path);
+        std::cout << "curvature = " << curvature << std::endl;
         if(curvature < 1)
         {
             forsee_path.header.frame_id = global_frame;
@@ -88,9 +88,10 @@ void Controller::Plan(const ros::TimerEvent& event){
                 i++;
             }
             forsee_path_pub.publish(forsee_path);
-            if(!Passbility_check(costmap,forsee_path,search_radius,narrow_threshold, obstacle_result))
+            if(!Passbility_check(costmap, forsee_path, local_path, search_radius, narrow_threshold, obstacle_result_l, obstacle_result_r))
             {
                 narrow = true;
+                std::cout << "narrow_area" <<std::endl;
                 if((abs(YawErrorCal(robot_pose,prune_path.poses[5])) > M_PI/36) )
                     turn_state = true;
             }   
@@ -98,7 +99,8 @@ void Controller::Plan(const ros::TimerEvent& event){
             {
                 narrow = false;
             }   
-            publishObstaclesGrid(obstacle_result, costmap.info.resolution);
+            publishObstaclesGrid(obstacle_result_r, costmap.info.resolution,obstacle_pub_r);
+            publishObstaclesGrid(obstacle_result_l, costmap.info.resolution,obstacle_pub_l);
         }
         else 
         {
@@ -107,6 +109,7 @@ void Controller::Plan(const ros::TimerEvent& event){
             forsee_path_pub.publish(forsee_path);
             narrow = false;
         }
+        local_path_pub.publish(local_path);
         //朝向与前进方向相差过大时要先调整雷达方向
         if((abs(YawErrorCal(robot_pose,prune_path.poses[5])) > M_PI/2) || turn_state)
         {
@@ -124,21 +127,14 @@ void Controller::Plan(const ros::TimerEvent& event){
             cmd_vel.linear.x = 0;
             cmd_vel.linear.y = 0;
             cmd_vel.linear.z = 0;
-            cmd_vel.angular.z = error * wz_p_value + (error - last_yaw_error)* wz_d_value;
+            cmd_vel.angular.z = YawControl(error);
             cmd_vel_pub.publish(cmd_vel);
-            last_yaw_error = error;
             ROS_INFO("Turnning attitude!");
             std::cout << "yaw error = " << error << std::endl;
             return;
         }
-        //平滑成功判断
+
         geometry_msgs::Twist cmd_vel;
-        // if(narrow || curvature > 2)
-        //     FollowTraj(robot_pose, global_path, cmd_vel);
-        // else if(local_path.poses.size() >=2)
-        //     FollowTraj(robot_pose, local_path, cmd_vel);
-        // else
-        //     FollowTraj(robot_pose, prune_path, cmd_vel); 
         FollowTraj(robot_pose, prune_path, cmd_vel);
         if(narrow) cmd_vel.linear.z = 2;
         cmd_vel_pub.publish(cmd_vel);
@@ -182,15 +178,7 @@ void Controller::GlobalPathCallback(const nav_msgs::PathConstPtr & msg){
       plan = true;
   }
 }
-// void Controller::DivergetatusCallback(const std_msgs::BoolConstPtr &msg){
-//     if(msg->data == 1){
-//         diverge = true;
-//         plan = false;
-//     }
-//     else {
-//         diverge = false;
-//     }
-// }
+
 void Controller::MatchCallback(const std_msgs::BoolConstPtr &msg){
     if(msg->data == 1){
         diverge = false;
@@ -217,15 +205,33 @@ bool Controller::world2Grid(
 
     return (gx >= 0 && gx < costmap.info.width && gy >= 0 && gy < costmap.info.height);
 }
-bool Controller::Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Path &plan, double search_radius, int threshold, std::vector<ObstacleResult> &result)
+bool Controller::Grid2world(int gx, int gy, const nav_msgs::OccupancyGrid& costmap,
+                double& wx, double& wy)
+{
+    if (costmap.info.width == 0 || costmap.info.height == 0) return false;
+
+    wx = (gx+0.5) * costmap.info.resolution + costmap.info.origin.position.x;
+    wy = (gy+0.5) * costmap.info.resolution + costmap.info.origin.position.y;
+
+    return true;   
+}
+bool Controller::Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Path &plan, nav_msgs::Path& optimized_path, double search_radius, int threshold, 
+                                    std::vector<ObstacleResult> &result_l, std::vector<ObstacleResult> &result_r)
 {
     int count = 0;
     int grid_radius = search_radius / costmap.info.resolution;
     ObstacleResult obstacle;
-    result.clear();
+    result_l.clear();
+    result_r.clear();
+    // result.clear();
+    optimized_path.poses.clear();
     for(auto &pose : plan.poses)    
-    {
+    {               
+        geometry_msgs::PoseStamped pose_opt;
+        pose_opt = pose;
         int grid_x, grid_y;
+        int y_index = 2 * grid_radius - 1;
+        bool split_flag = 0;
         if(!world2Grid(pose.pose.position.x, pose.pose.position.y, costmap, grid_x, grid_y)) continue;
         int max_x = grid_x, max_y = grid_y, min_x = grid_x, min_y = grid_y;
         for(int x = grid_x-grid_radius; x <= grid_x + grid_radius; x++)
@@ -233,6 +239,7 @@ bool Controller::Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Pa
             {
                 if (x < 0 || x >= costmap.info.width || y < 0 || y >= costmap.info.height) continue;
                 int index = y * costmap.info.width + x;
+                if(costmap.data[index] < 70 && y >  y_index)   split_flag = 1;
                 if(costmap.data[index] > 70) 
                 {
                     obstacle.cost = costmap.data[index];
@@ -244,18 +251,48 @@ bool Controller::Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Pa
                     if(x < min_x) min_x = x;
                     if(y > max_y) max_y = y;
                     if(y < min_y) min_y = y;
-                    result.push_back(obstacle);
+                    // result.push_back(obstacle);
+                    if(split_flag == 0)
+                    {
+                        result_l.push_back(obstacle);
+                        y_index = y ;
+                    }
+                    else result_r.push_back(obstacle);
                 }
             }
         if(max_x > grid_x && max_y > grid_y && min_x < grid_x && min_y < grid_y)
+        {
             count ++;
+            double wx, wy;
+            double min_dist;
+            double dist;
+            ObstacleResult left, right;
+            min_dist = 1000000.0f;
+            for(auto &grid : result_l){
+                dist = hypot(pose.pose.position.x - grid.world_position.x, pose.pose.position.y - grid.world_position.y);
+                if (dist < min_dist) {
+                    min_dist = dist;
+                    left = grid;
+                }
+            }
+            min_dist = 1000000.0f;
+            for(auto &grid : result_r){
+                dist = hypot(pose.pose.position.x - grid.world_position.x, pose.pose.position.y - grid.world_position.y);
+                if (dist < min_dist) {
+                    min_dist = dist;
+                    right = grid;
+                }
+            }
+            pose_opt.pose.position.x = (left.world_position.x + right.world_position.x) / 2;
+            pose_opt.pose.position.y = (left.world_position.y + right.world_position.y) / 2;
+        }   
+        optimized_path.poses.push_back(pose_opt);
     }
-    std::cout << "result" << result.size() << std::endl;
     std::cout << "narrow count = " << count << std::endl;
     if (count < threshold) return true;
     else return false;
 }
-void Controller::publishObstaclesGrid(const std::vector<ObstacleResult>& obstacles, double resolution)
+void Controller::publishObstaclesGrid(const std::vector<ObstacleResult>& obstacles, double resolution, ros::Publisher& pub)
 {
     nav_msgs::GridCells grid;
     grid.header.frame_id = "map";
@@ -270,7 +307,7 @@ void Controller::publishObstaclesGrid(const std::vector<ObstacleResult>& obstacl
         cell.z = 0.0;
         grid.cells.push_back(cell);
     }
-    obstacle_pub.publish(grid);   
+    pub.publish(grid);   
 }
 void Controller::FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs::Path& path, int& prune_index, double prune_ahead_dist){
 
@@ -317,6 +354,20 @@ double Controller::CurvatureCal(const nav_msgs::Path& traj){
     else curvature = 0;
     return curvature;
 }
+double Controller::YawControl(const geometry_msgs::PoseStamped& robot_pose,
+                            const geometry_msgs::PoseStamped& path_pose)
+{
+    double error = YawErrorCal(robot_pose,path_pose);
+    double wz = wz_p_value * error + wz_d_value*(error - last_yaw_error);
+    last_yaw_error = error;
+    return wz;
+}
+double Controller::YawControl(double error)
+{
+    double wz = wz_p_value * error + wz_d_value*(error - last_yaw_error);
+    last_yaw_error = error;
+    return wz;   
+}
 void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
                             const nav_msgs::Path& traj,
                             geometry_msgs::Twist& cmd_vel){
@@ -333,8 +384,8 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
         }
         //double diff_yaw = GetYawFromOrientation(traj.poses[0].pose.orientation)- GetYawFromOrientation(robot_pose.pose.orientation);
         int index;
-        //曲率计算,高曲率的地方前视距离远一些
-        if(curvature > 1) 
+        //高曲率或狭窄的地方前视距离远一些
+        if(curvature > 1 || narrow) 
         {
             p_value = curve_p_value;
             index = std::min(curve_foresee_index, static_cast<int>(traj.poses.size()));
@@ -344,14 +395,13 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
             p_value = straight_p_value;
             index = std::min(straight_foresee_index, static_cast<int>(traj.poses.size()));
         }
+        followed_pose_pub.publish(traj.poses[index]);
         double diff_yaw = atan2((traj.poses[index].pose.position.y-robot_pose.pose.position.y ),( traj.poses[index].pose.position.x-robot_pose.pose.position.x));
         if(std::isnan(diff_yaw))
         {
             ROS_ERROR("diff_yaw NAN");
             std::cout << "DISTANCE TO NEXT TARGET"<<GetEuclideanDistance(robot_pose,traj.poses[index])<< std::endl;
         }
-        if(debug_en)
-            std::cout << "curvature = "<<curvature <<std::endl;
         diff_yaw = anglelimit(diff_yaw);
 
         double vx_global = cos(diff_yaw)*diff_distance*p_value;//*diff_distance*p_value_;
@@ -368,7 +418,9 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
         // double wz = wz_p_value * error + wz_d_value*(error - last_yaw_error);
         // last_yaw_error = error;
         double wz = 0;
-        cmd_vel.angular.z = 0;
+        if(!narrow)
+            wz = YawControl(robot_pose,traj.poses[index]);
+        cmd_vel.angular.z = wz;
         //对旋转的补偿，匀速旋转是，实际走过的是一段圆弧
         double yaw_calibrated = anglelimit(yaw - wz / (plan_freq *2)) ;
         // std::cout<<"yaw_error  "<<error<<"   wz   "<< wz <<std::endl;

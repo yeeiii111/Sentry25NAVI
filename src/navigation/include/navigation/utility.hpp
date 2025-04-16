@@ -8,8 +8,8 @@
 
 double GetEuclideanDistance(const geometry_msgs::PoseStamped & pose_1,
                             const geometry_msgs::PoseStamped & pose_2){
-  std::cout << "pose_1.x: " << pose_1.pose.position.x << std::endl;
-  std::cout << "pose_2.x: " << pose_2.pose.position.x << std::endl;
+  // std::cout << "pose_1.x: " << pose_1.pose.position.x << std::endl;
+  // std::cout << "pose_2.x: " << pose_2.pose.position.x << std::endl;
   return hypot(pose_1.pose.position.x-pose_2.pose.position.x,
                pose_1.pose.position.y-pose_2.pose.position.y);
 }
