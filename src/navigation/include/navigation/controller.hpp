@@ -1,6 +1,6 @@
 #ifndef CONTROLLER_H
 #define CONTROLLER_H
-
+#include <mutex>
 #include <cmath>
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
@@ -23,12 +23,7 @@
 #include <Eigen/Eigen>
 #include <chrono>
 #include <std_msgs/Bool.h>
-struct ObstacleResult {
-    geometry_msgs::Point world_position;  // 障碍物世界坐标
-    int grid_x;                           // 障碍物栅格坐标X
-    int grid_y;                           // 障碍物栅格坐标Y
-    unsigned char cost;                   // 代价值（0-100）
-};
+#include"navigation/fieldoptimizer.hpp"
 class Controller {
 public:
     Controller();
@@ -45,10 +40,11 @@ public:
                     int& gx, int& gy);
     bool Grid2world(int gx, int gy, const nav_msgs::OccupancyGrid& costmap,
                     double& wx, double& wy);
-    bool Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Path &plan, nav_msgs::Path& optimized_path, double search_radius, int threshold, 
-                          std::vector<ObstacleResult> &result_l, std::vector<ObstacleResult> &result_r);
+    bool Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Path &plan, double search_radius, int threshold, 
+                          std::vector<ObstacleResult> &result, int forsee_index);// = short_forsee_index
     void publishObstaclesGrid(const std::vector<ObstacleResult>& obstacles, double resolution, ros::Publisher& pub);
     void Plan(const ros::TimerEvent& event);
+    void PathOptimaze(const ros::TimerEvent& event);
     double YawErrorCal(const geometry_msgs::PoseStamped& robot_pose,
                       const geometry_msgs::PoseStamped& path_pose);
     double CurvatureCal(const nav_msgs::Path& traj);
@@ -60,18 +56,20 @@ private:
     ros::Publisher prune_path_pub;
     ros::Publisher local_path_pub;
     ros::Publisher forsee_path_pub;
-    ros::Publisher obstacle_pub_l;
-    ros::Publisher obstacle_pub_r;
+    ros::Publisher obstacle_pub;
     ros::Publisher followed_pose_pub;
     ros::Subscriber diverge_sub;
     ros::Subscriber match_sub;
     ros::Subscriber global_path_sub;
     ros::Subscriber costmap_sub;
     ros::Timer      plan_timer;
+    ros::Timer      optimize_timer;
 
     std::shared_ptr<tf::TransformListener> tf_listener;
     nav_msgs::OccupancyGrid costmap;
     nav_msgs::Path global_path;
+    nav_msgs::Path prune_path;
+    nav_msgs::Path opt_path;
     bool narrow = false;
     bool diverge = false;
     bool plan = false;
@@ -79,6 +77,7 @@ private:
     bool debug_en;
     int prune_index = 0;
     int forsee_index = 0;
+    int short_forsee_index = 0;
     int  narrow_threshold;
     double max_speed;
     double set_yaw_speed = 0;
@@ -93,13 +92,17 @@ private:
     int straight_foresee_index;
     int curve_foresee_index;   
     int plan_freq;
+    int opt_freq;
     double goal_dist_tolerance;
     double prune_ahead_dist;
 
     double yaw;
-    std::vector<ObstacleResult> obstacle_result_l;
-    std::vector<ObstacleResult> obstacle_result_r;
+    std::vector<ObstacleResult> obstacle_result;
     std::string global_frame;
+    std::mutex  prunepath_mutex;
+    std::mutex  optpath_mutex;
+    Field_Optimizer::Params param_;
+    Field_Optimizer optimizer_;
 
 };   
 double normalizeRadian(const double angle)

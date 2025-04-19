@@ -56,4 +56,8 @@ double computeCurvature(const geometry_msgs::PoseStamped& p1,
     if(std::isnan(angle_diff)) ROS_ERROR("curvature NAN");
     return std::abs(angle_diff) / GetEuclideanDistance(p1, p3);
 }
+double sigmoid(double x)
+{
+    return 1 / (1 + exp(-x));
+}
 #endif

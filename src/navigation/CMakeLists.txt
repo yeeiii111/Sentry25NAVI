@@ -143,11 +143,16 @@ include_directories(include ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
 ## target back to the shorter version for ease of user use
 ## e.g. "rosrun someones_pkg node" instead of "rosrun someones_pkg someones_pkg_node"
 # set_target_properties(${PROJECT_NAME}_node PROPERTIES OUTPUT_NAME node PREFIX "")
+add_library(field_optimizer src/fieldoptimizer.cpp)
+target_link_libraries(field_optimizer ${catkin_LIBRARIES})
+
 add_executable(controller src/controller.cpp)
-target_link_libraries(controller ${catkin_LIBRARIES})
+target_link_libraries(controller ${catkin_LIBRARIES} field_optimizer)
 
 add_executable(costmap_clean src/costmap_clean.cpp)
 target_link_libraries(costmap_clean ${catkin_LIBRARIES})
+
+
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
