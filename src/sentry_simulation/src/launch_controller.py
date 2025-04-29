@@ -7,9 +7,9 @@ from std_msgs.msg import Bool
 class LaunchController:
     def __init__(self):
         self.launches = {}
-        self.diverge_sub = None
-        self.diverge_state = False
-        self.former_diverge_state = False
+        self.localize_sub = None
+        self.localize_state = False
+        self.former_localize_state = False
     def start_launch(self, launch_file_path, launch_name):
         uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
         roslaunch.configure_logging(uuid)
@@ -30,6 +30,7 @@ class LaunchController:
 
     def restart_launch(self,launch_file_path, launch_name):
         self.stop_launch(launch_name)
+        rospy.sleep(0.5)
         self.start_launch(launch_file_path,launch_name)
 
     def stop_all_launches(self):
@@ -39,11 +40,11 @@ class LaunchController:
 
     def topic_callback(self, msg):
         """话题回调函数"""
-        self.former_diverge_state = self.diverge_state
+        self.former_localize_state = self.localize_state
         if msg.data:
-            self.diverge_state = True
+            self.localize_state = True
         else:
-            self.diverge_state = False
+            self.localize_state = False
     def signal_handler(self, sig, frame):
         """处理Ctrl+C信号"""
         rospy.loginfo("Ctrl+C detected, stopping all launch files...")
@@ -83,14 +84,12 @@ if __name__ == "__main__":
 
 
     # 订阅一个话题
-    controller.diverge_sub = rospy.Subscriber("/diverge", Bool, controller.topic_callback)
-
+    controller.localize_sub = rospy.Subscriber("/localize_success", Bool, controller.topic_callback)
     # 检查话题值并重新启动launch文件
-    rate = rospy.Rate(10)  # 10 Hz
+    rate = rospy.Rate(1000)  # 10 Hz
     while not rospy.is_shutdown():
-        if controller.diverge_state and (not controller.former_diverge_state) :
-            controller.restart_launch(point_lio_path, "point_lio")
+        if controller.localize_state and (not controller.former_localize_state) :
+            controller.restart_launch(point_lio_path, "point_lio")    
         rate.sleep()
-
     # 停止所有launch文件
     controller.stop_all_launches()

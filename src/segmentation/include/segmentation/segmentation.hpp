@@ -1,3 +1,5 @@
+#ifndef SEGMENTATION_H
+#define SEGMENTATION_H
 #include <mutex>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -6,6 +8,8 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/voxel_grid.h>
 #include <ros/ros.h>
+#include <nav_msgs/GridCells.h>
+#include <nav_msgs/OccupancyGrid.h>
 #include <std_msgs/Bool.h>
 #include <tf2/utils.h>
 #include <tf/tf.h>
@@ -31,9 +35,12 @@ public:
     void timer(const ros::TimerEvent& event);
     // void Livox_Scan_Callback(const livox_ros_driver2::CustomMsg::ConstPtr &msg);
     void Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg);
+    void Costmap_Callback(const nav_msgs::OccupancyGridConstPtr& msg);
+    void grid2pointcloud(const nav_msgs::OccupancyGrid& costmap, pcl::PointCloud<pcl::PointXY>& cloud);
     void cloud_crop(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, Eigen::Vector3d pos, float box_size, pcl::PointCloud<pcl::PointXYZ>::Ptr &result);
 private:
     double                                          distance_threshold = 0.2;
+    double                                          costmap_distance_threshold = 0.05;
     double                                          leaf_size;
     double                                          diverge_threshold;
     double                                          lidar_height;
@@ -51,12 +58,13 @@ private:
     std_msgs::Bool                                  diverge;
     std_msgs::Bool                                  match;
     pcl::KdTreeFLANN<pcl::PointXYZ>                 kdtree;
+    pcl::KdTreeFLANN<pcl::PointXY>                  flat_kdtree;
     std::string                                     map_path;
     ros::Timer                                      run_timer;
     ros::Time                                       scan_timestamp;
     ros::Time                                       last_scan_timestamp;
     Eigen::Vector3d                                 box_center;
-    pcl::PointCloud<pcl::PointXYZ>                  tem;
+    pcl::PointCloud<pcl::PointXY>::Ptr              costmap_points;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             prior_map;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             filtered_prior_map;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             obstacle;
@@ -79,6 +87,8 @@ private:
     ros::Publisher                                  diverge_pub;
     ros::Publisher                                  match_pub;//点云匹配上一定match，没匹配上可能是里程计退化也可能只是瞬间角速度太大，所以用两个标志位描述定位状态
     ros::Subscriber                                 scan_sub;
+    ros::Subscriber                                 costmap_sub;
+    nav_msgs::OccupancyGrid                         costmap;
     std::chrono::time_point<std::chrono::high_resolution_clock>     match_time;
     std::vector<double>                             extrinT;
     std::vector<double>                             extrinR;
@@ -90,3 +100,14 @@ private:
     Eigen::Isometry3d                               T_map_odom;
     std::mutex                                      scan_mutex;
 };
+bool Grid2world(int gx, int gy, const nav_msgs::OccupancyGrid& costmap,
+                double& wx, double& wy)
+{
+    if (costmap.info.width == 0 || costmap.info.height == 0) return false;
+
+    wx = (gx+0.5) * costmap.info.resolution + costmap.info.origin.position.x;
+    wy = (gy+0.5) * costmap.info.resolution + costmap.info.origin.position.y;
+
+    return true;   
+}
+#endif

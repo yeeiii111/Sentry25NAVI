@@ -37,6 +37,7 @@ Relocalization::Relocalization():
     nh.param<bool>("debug_en", debug_en, false);
     nh.param<bool>("use_stl_cloud", use_stl_cloud, false);
     nh.param<double>("diverge_threshold", diverge_threshold, 10.0f);
+    nh.param<double>("precise_diverge_threshold", precise_diverge_threshold, 5.0f);
     nh.param<double>("lidar_height",lidar_height,0.145);
     nh.param<double>("lidar_pitch",lidar_roll,-0.349);
     // diverge.data = 0;
@@ -47,17 +48,16 @@ Relocalization::Relocalization():
     initial_pose_sub = nh.subscribe("/initialpose",5,&Relocalization::InitialPoseCallback,this);
     diverge_sub = nh.subscribe("/diverge",5,&Relocalization::Diverge_Callback,this);
     match_sub = nh.subscribe("/match",5,&Relocalization::Match_Callback,this);
+    narrow_sub = nh.subscribe("/controller/narrow",5,&Relocalization::Narrow_Callback,this);
     target_pub = nh.advertise<sensor_msgs::PointCloud2>("target",5);
     source_pub = nh.advertise<sensor_msgs::PointCloud2>("source",5);
     align_pub = nh.advertise<sensor_msgs::PointCloud2>("aligned",5);
-    iss_source_pub = nh.advertise<sensor_msgs::PointCloud2>("iss_source",5);
-    iss_target_pub = nh.advertise<sensor_msgs::PointCloud2>("iss_target",5);
+    localize_success_pub= nh.advertise<std_msgs::Bool>("/localize_success",5);
     localize_success = false;
     first_time = true;
     y_dist = 0;
     previous_error = 0;
     yaw_bias_cnt = 0;
-    // diverge_pub= nh.advertise<std_msgs::Bool>("/diverge",5);
     run_timer = nh.createTimer(ros::Duration(1.0/freq),&Relocalization::timer,this);
 
     if(pcl::io::loadPCDFile(pcd_path,*prior_map)==-1){
@@ -103,14 +103,19 @@ void Relocalization::timer(const ros::TimerEvent& event)
     T_vice_map_odom.child_frame_id = "odom";
     if(!scan->empty())
     {
-        if(localize_success == false || diverge.data == true)
+        if(localize_success == false || diverge.data == true || narrow_rising_edge)
         {
             {
                 std::lock_guard<std::mutex> lock(scan_mutex);
                 Eigen::Affine3d tem(T_odom_lidar);
                 pcl::transformPointCloud(*scan,*scan_odom,tem);
             }
-            registration(scan_odom, leaf_size);  
+            if(narrow_rising_edge)
+            {
+                registration(scan_odom, leaf_size, precise_diverge_threshold);  
+            }
+            else
+                registration(scan_odom, leaf_size, diverge_threshold);     
             Eigen::Quaterniond q(T_map_scan.linear());
             Eigen::Vector3d translation =  T_map_scan.translation();  
 
@@ -126,28 +131,34 @@ void Relocalization::timer(const ros::TimerEvent& event)
             std::cout<<"y = "<< translation.y() << std::endl;
             std::cout<<"z = "<< translation.z() << std::endl;
             broadcaster.sendTransform(T_vice_map_odom);
-            // diverge_pub.publish(diverge);            
         }
-        if(match.data == true)
+        std_msgs::Bool tem;
+        tem.data=localize_success;
+        localize_success_pub.publish(tem);  
+        if(match.data == true && localize_success == true)
         {
-            // auto robot_pose = tf2_buffer.lookupTransform("map","body",ros::Time(0));
-            // y_dist = robot_pose.transform.translation.y;
-            // // 提取平移部分并赋值给 Isometry3d
-            // Eigen::Vector3d translation(
-            //     robot_pose.transform.translation.x,
-            //     robot_pose.transform.translation.y,
-            //     robot_pose.transform.translation.z
-            // );
-            // previous_icp_result.translation() = translation;
-            // T_relocalize.translation() = translation;
-            // // 提取四元数并转换为旋转矩阵，赋值给 Isometry3d
-            // Eigen::Quaterniond quat(
-            //     robot_pose.transform.rotation.w,
-            //     robot_pose.transform.rotation.x,
-            //     robot_pose.transform.rotation.y,
-            //     robot_pose.transform.rotation.z
-            // );
-            // previous_icp_result.rotate(quat.toRotationMatrix());
+            auto robot_pose = tf2_buffer.lookupTransform("vice_map","body",ros::Time(0));
+            y_dist = robot_pose.transform.translation.y;
+            // 提取平移部分并赋值给 Isometry3d
+            Eigen::Vector3d translation(
+                robot_pose.transform.translation.x,
+                robot_pose.transform.translation.y,
+                robot_pose.transform.translation.z
+            );
+            previous_icp_result.translation() = translation;
+            T_relocalize.translation() = translation;
+            // 提取四元数并转换为旋转矩阵，赋值给 Isometry3d
+            Eigen::Quaterniond quat(
+                robot_pose.transform.rotation.w,
+                robot_pose.transform.rotation.x,
+                robot_pose.transform.rotation.y,
+                robot_pose.transform.rotation.z
+            );
+            previous_icp_result.linear() = quat.toRotationMatrix();
+            T_relocalize.linear() = quat.toRotationMatrix();
+            // std::cout << translation.x() << std::endl;
+            // std::cout << translation.y() << std::endl;
+            // std::cout << translation.z() << std::endl;           
         }
     }
     //debug
@@ -155,22 +166,22 @@ void Relocalization::timer(const ros::TimerEvent& event)
     {
         sensor_msgs::PointCloud2 msg_1;
         pcl::toROSMsg(*filtered_prior_map, msg_1);
-        msg_1.header.frame_id = "map";  
+        msg_1.header.frame_id = "vice_map";  
         target_pub.publish(msg_1); 
 
-        // sensor_msgs::PointCloud2 msg_2;
-        // pcl::toROSMsg(*scan_odom, msg_2);
-        // msg_2.header.frame_id = "map";  
-        // source_pub.publish(msg_2); 
+        sensor_msgs::PointCloud2 msg_2;
+        pcl::toROSMsg(*scan_odom, msg_2);
+        msg_2.header.frame_id = "vice_map";  
+        source_pub.publish(msg_2); 
 
-        // sensor_msgs::PointCloud2 msg_3;
-        // pcl::toROSMsg(*aligned, msg_3);
-        // msg_3.header.frame_id = "map";  
-        // align_pub.publish(msg_3);       
+        sensor_msgs::PointCloud2 msg_3;
+        pcl::toROSMsg(*aligned, msg_3);
+        msg_3.header.frame_id = "vice_map";  
+        align_pub.publish(msg_3);       
     }
 
 }
-void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, double leaf_size)
+void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, double leaf_size, double threshold)
 {
     auto start_time = std::chrono::high_resolution_clock::now();
     //icp时过高的点云造成错误匹配
@@ -225,25 +236,27 @@ void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &sou
     first_time = false;
     T_map_scan = result.T_target_source;
     previous_icp_result = result.T_target_source;
-    if(result.error < diverge_threshold){
+    if(result.error < threshold){
         localize_success  = true;
-        previous_error = 0;
+        narrow_rising_edge = false;
+        previous_error = 10000;
+        yaw_bias_cnt = 0;
     }
     else {
         localize_success = false;
-        if(result.error >= previous_error || (previous_error - result.error < 5))//无法收敛时换一个先验位姿
+        if(result.error >= previous_error || (previous_error - result.error < 1))//无法收敛时换一个先验位姿
         {
             previous_error = 100000.0f;
             // Eigen::Isometry3d T_rotation = Eigen::Isometry3d::Identity();
             double yaw_bias;
             if(yaw_bias_cnt % 2 == 0) yaw_bias = (yaw_bias_cnt/2 + 1) * 0.3491f;//每次旋转20度
             else yaw_bias = -(yaw_bias_cnt/2 + 1) * 0.3491f;
-            std::cout << "yaw_bias:" << yaw_bias <<std::endl;
+            std::cout << "-------------------yaw_bias:-------------------" << yaw_bias <<std::endl;
             double angle_x = 20.0 * M_PI / 180.0;  // 转换为弧度
             Eigen::AngleAxisd rotate_x(angle_x, Eigen::Vector3d::UnitX());
             Eigen::Vector3d new_axis = rotate_x * Eigen::Vector3d::UnitZ();
             Eigen::AngleAxis yaw(yaw_bias,new_axis);
-            T_relocalize.linear() = yaw.toRotationMatrix();
+            T_relocalize.rotate(yaw.toRotationMatrix());
             previous_icp_result = T_relocalize;
             yaw_bias_cnt ++; 
         }
@@ -311,6 +324,20 @@ void Relocalization::Match_Callback(const std_msgs::Bool::ConstPtr &msg)
 {
     match.data = msg->data;
 }
+void Relocalization::Narrow_Callback(const std_msgs::Bool::ConstPtr &msg)
+{
+    if(!narrow.data && msg->data)   
+    {
+        narrow_rising_edge = true;
+        localize_success = false;
+        ROS_INFO("CAUGHT RISING_EDGE!");
+        std_msgs::Bool tem;
+        tem.data = localize_success;
+        localize_success_pub.publish(tem);
+    }
+    narrow.data = msg->data;
+} 
+
 void Relocalization::compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud, 
                                         pcl::search::KdTree<pcl::PointXYZ>::Ptr &tree,
                                         pcl::PointCloud<pcl::FPFHSignature33>::Ptr& fpfh){
@@ -384,8 +411,6 @@ pcl::PointCloud<pcl::PointXYZ> Relocalization::sac_ia_compute(pcl::PointCloud<pc
         // sensor_msgs::PointCloud2 msg_2;
         // pcl::toROSMsg(*target_iss, msg_2);
         // msg_2.header.frame_id = "map";   
-        // iss_source_pub.publish(msg_1);
-        // iss_target_pub.publish(msg_2);
   
     }
 

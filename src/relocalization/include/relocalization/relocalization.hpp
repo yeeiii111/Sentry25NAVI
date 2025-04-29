@@ -34,10 +34,11 @@ class Relocalization{
 public:
     Relocalization();
     ~Relocalization() = default;
-    void registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, double leaf_size);
+    void registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, double leaf_size, double threshold);
     void timer(const ros::TimerEvent& event);
     void Diverge_Callback(const std_msgs::Bool::ConstPtr &msg);
     void Match_Callback(const std_msgs::Bool::ConstPtr &msg);
+    void Narrow_Callback(const std_msgs::Bool::ConstPtr &msg);   
     void Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg);
     void InitialPoseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr msg);
     void compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud, 
@@ -50,14 +51,17 @@ private:
     bool                                        first_time;
     bool                                        localize_success;
     bool                                        use_stl_cloud;
+    bool                                        narrow_rising_edge;
     std_msgs::Bool                              diverge;
     std_msgs::Bool                              match;  
+    std_msgs::Bool                              narrow;
     int                                         freq;
     int                                         pointcloud_count;
     int                                         num_threads;
     int                                         num_neighbors;
-    int                                      yaw_bias_cnt;//挨个尝试初始位姿的计数器
+    int                                         yaw_bias_cnt;//挨个尝试初始位姿的计数器
     double                                      diverge_threshold;
+    double                                      precise_diverge_threshold;
     double                                      leaf_size;
     double                                      map_leaf_size;
     double                                      max_dist_sq;
@@ -87,12 +91,11 @@ private:
     ros::Subscriber                             initial_pose_sub;
     ros::Subscriber                             diverge_sub;
     ros::Subscriber                             match_sub;
+    ros::Subscriber                             narrow_sub;
     ros::Publisher                              target_pub;
     ros::Publisher                              source_pub;
     ros::Publisher                              align_pub;
-    ros::Publisher                              diverge_pub;
-    ros::Publisher                              iss_source_pub;
-    ros::Publisher                              iss_target_pub;
+    ros::Publisher                              localize_success_pub;
     ros::Timer                                  run_timer;
     geometry_msgs::TransformStamped             T_vice_map_odom;
     tf2_ros::StaticTransformBroadcaster         broadcaster;

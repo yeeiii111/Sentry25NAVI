@@ -1,0 +1,14 @@
+<launch>  
+    <node pkg="sentry_simulation" name="path2marker1" type="path2marker" output="screen">
+    <param name="subtopic" value="/controller/local_path" />
+    <param name="pubtopic" value="/local_marker" />
+    </node>
+    <node pkg="sentry_simulation" name="path2marker2" type="path2marker" output="screen">
+    <param name="subtopic" value="/controller/prune_path" />
+    <param name="pubtopic" value="/prune_marker" />
+    </node>
+    <node pkg="sentry_simulation" name="path2marker3" type="path2marker" output="screen">
+    <param name="subtopic" value="/move_base/TrajectoryPlannerROS/global_plan" />
+    <param name="pubtopic" value="/global_marker" />
+    </node>
+</launch>

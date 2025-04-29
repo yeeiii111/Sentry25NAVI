@@ -20,6 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   roscpp
   rospy
+  navigation
 )
 
 find_package(PCL 1.11 REQUIRED COMPONENTS common kdtree io filters )

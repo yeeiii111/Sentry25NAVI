@@ -28,7 +28,7 @@ Controller::Controller()
     nh.param<double>("param_safe_distance",param_.safe_distance, 0.5);
     nh.param<int>("opt_freq", opt_freq, 3);
     prune_path_pub = nh.advertise<nav_msgs::Path>("prune_path",5);
-    followed_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("followed_path",5);
+    narrow_pub = nh.advertise<std_msgs::Bool>("narrow",5);
     local_path_pub = nh.advertise<nav_msgs::Path>("local_path",5);
     forsee_path_pub = nh.advertise<nav_msgs::Path>("forsee_path",5);
     obstacle_pub = nh.advertise<nav_msgs::GridCells>("obstacle_grids",5); 
@@ -37,7 +37,7 @@ Controller::Controller()
     global_path_sub = nh.subscribe("/move_base/GlobalPlanner/plan",5,&Controller::GlobalPathCallback,this);
     match_sub = nh.subscribe("/match",5,&Controller::MatchCallback,this);
     costmap_sub = nh.subscribe("//move_base/global_costmap/costmap", 1, &Controller::CostmapCallback, this);
-
+    localize_success_sub = nh.subscribe("/localize_success",5, &Controller::LocalizeCallback, this);
     tf_listener = std::make_shared<tf::TransformListener>();
     plan_timer = nh.createTimer(ros::Duration(1.0/plan_freq),&Controller::Plan,this);
     optimize_timer = nh.createTimer(ros::Duration(1.0/opt_freq),&Controller::PathOptimaze,this);
@@ -68,20 +68,41 @@ void Controller::Plan(const ros::TimerEvent& event){
             std::cout << cmd_vel.linear.z << std::endl;
             ROS_INFO("Planning Success!");
             prune_index = 0;
+            follow_index = 0;
+            return;
+        }
+        auto time = std::chrono::high_resolution_clock::now();
+        if(!localized ||  (time - localized_time < std::chrono::milliseconds(5000))) 
+        {
+            geometry_msgs::Twist cmd_vel;
+            cmd_vel.linear.x = 0;
+            cmd_vel.linear.y = 0;
+            cmd_vel.linear.z = 0;
+            cmd_vel.angular.z = 0;
+            cmd_vel_pub.publish(cmd_vel);
             return;
         }
         //原GenTraj函数有时会在local path中加入Nan点，导致后续错误，删除这些点有时会导致路经平滑失败，即localpath为空
         //平滑得到的轨迹会过障碍，移除这个功能
         //std::lock_guard<std::mutex> lock(prunepath_mutex);
         std::lock_guard<std::mutex> lock(optpath_mutex);
-       
-        curvature = CurvatureCal(opt_path);
-        // std::cout << "curvature = " << curvature << std::endl;
+        FindNearstPose(robot_pose, opt_path, follow_index, prune_ahead_dist);
+
+        int i = follow_index;
+        nav_msgs::Path prune_opt_path;
+        while(i < opt_path.poses.size()){
+            prune_opt_path.poses.push_back(opt_path.poses[i]);
+            i++;
+            // std::cout << i << std::endl;
+        }
+        curvature = CurvatureCal(prune_opt_path);
+        //std::cout << "curvature = " << curvature << std::endl;
 
         //朝向与前进方向相差过大时要先调整雷达方向
-        if((abs(YawErrorCal(robot_pose,opt_path.poses[10])) > M_PI/2) || ((abs(YawErrorCal(robot_pose,opt_path.poses[10])) > M_PI/36) && narrow) || turn_state)
+        int index = std::min(static_cast<int>(prune_opt_path.poses.size()), 10);
+        if((abs(YawErrorCal(robot_pose,prune_opt_path.poses[index])) > M_PI/2) || ((abs(YawErrorCal(robot_pose,prune_opt_path.poses[index])) > M_PI/36) && narrow) || turn_state)
         {
-            double error = YawErrorCal(robot_pose,opt_path.poses[10]);
+            double error = YawErrorCal(robot_pose,prune_opt_path.poses[index]);
             if(abs(error) < M_PI/6 && (!narrow)){
                 turn_state = false;
                 return;
@@ -99,17 +120,19 @@ void Controller::Plan(const ros::TimerEvent& event){
             cmd_vel_pub.publish(cmd_vel);
             ROS_INFO("Turnning attitude!");
             std::cout << "yaw error = " << error << std::endl;
-            std::cout << "robot x " << robot_pose.pose.position.x << std::endl;
-            std::cout << "robot y " << robot_pose.pose.position.y << std::endl;
-            std::cout << "target x " << opt_path.poses[10].pose.position.x << std::endl;
-            std::cout << "target y " << opt_path.poses[10].pose.position.y << std::endl;
+            // std::cout << "robot x " << robot_pose.pose.position.x << std::endl;
+            // std::cout << "robot y " << robot_pose.pose.position.y << std::endl;
+            // std::cout << "target x " << opt_path.poses[10].pose.position.x << std::endl;
+            // std::cout << "target y " << opt_path.poses[10].pose.position.y << std::endl;
 
-            followed_pose_pub.publish(opt_path.poses[30]);
+            // followed_pose_pub.publish(opt_path.poses[30]);
             return;
         }
 
         geometry_msgs::Twist cmd_vel;
-        FollowTraj(robot_pose, opt_path, cmd_vel);
+        FollowTraj(robot_pose, prune_opt_path, cmd_vel);
+        // cmd_vel.linear.x = 0;
+        // cmd_vel.linear.y = 0;
         if(narrow) cmd_vel.linear.z = 2;
         cmd_vel_pub.publish(cmd_vel);
     }   
@@ -132,7 +155,7 @@ void Controller::Plan(const ros::TimerEvent& event){
 }
 void Controller::PathOptimaze(const ros::TimerEvent& event)
 {
-    if(plan)
+    if(plan && localized)
     {
         geometry_msgs::PoseStamped robot_pose;
         nav_msgs::Path forcedpath;
@@ -151,14 +174,17 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
             prune_path.poses.swap(tem_prune_path);
         }
         prune_path_pub.publish(prune_path);
-
-        if(!Passbility_check(costmap, prune_path, search_radius, narrow_threshold, obstacle_result, short_forsee_index))
+        int obs_count = Passbility_check(costmap, prune_path, search_radius, obstacle_result, short_forsee_index);
+        if(obs_count > narrow_threshold)
         {
             narrow = true;
             std::cout << "NARROW" <<std::endl;
         }   
-        else narrow = false;
-
+        else if ((!narrow && obs_count < narrow_threshold) || (narrow && obs_count < 1)) 
+            {
+                narrow = false;
+                std::cout << " NOT NARROW" <<std::endl;
+            }
         publishObstaclesGrid(obstacle_result, costmap.info.resolution,obstacle_pub);
         int count = 0;
         for( auto& pose: prune_path.poses)
@@ -167,7 +193,7 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
             int size = static_cast<int>(prune_path.poses.size());
             double ratio;
             double x = static_cast<double>(size/2 - abs(size/2 - count));
-            ratio = 1 - exp(-x * 0.15);
+            ratio = 1 - exp(-x * 0.08);
             // std::cout << "ratio:" <<ratio << std::endl;
             if(optimizer_.optimize(obstacle_result, pose, pose_opt, ratio))
                 {tem_opt_path.push_back(pose_opt);
@@ -176,21 +202,39 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
             else 
             {
                 tem_opt_path.push_back(pose);
-                std::cout << "optimize failed!!!" ;
+                //std::cout << "optimize failed!!!" ;
             }
             count ++;
         }
         //起始和终止位置不优化
         tem_opt_path[0] = prune_path.poses[0];
         tem_opt_path.back() = prune_path.poses.back();
+        //std::cout << "before_local_path_size = " << opt_path.poses.size() << std::endl;
+        for(int i = 0; i < static_cast<int>(tem_opt_path.size()) - 1; i++)
+        {
+            while (i + 1 < tem_opt_path.size() && 
+            GetEuclideanDistance(tem_opt_path[i], tem_opt_path[i+1]) < 0.02)
+            {
+                tem_opt_path.erase(tem_opt_path.begin() + i + 1);
+            }
+        }
         {
             std::lock_guard<std::mutex> lock(optpath_mutex);
             opt_path.poses.swap(tem_opt_path);
             // opt_path.poses.clear();
             // GenTraj(forcedpath,opt_path,0.05);
         }
+        narrow_msg.data = narrow;
+        narrow_pub.publish(narrow_msg);
         local_path_pub.publish(opt_path);
-        std::cout << "local_path_size = " << opt_path.poses.size() << std::endl;
+        follow_index = 0;
+        //std::cout << "aft_local_path_size = " << opt_path.poses.size() << std::endl;
+    }
+    else 
+    {
+        opt_path.poses.clear();
+        prune_path.poses.clear();
+        local_path_pub.publish(opt_path);
     }
 
 
@@ -232,7 +276,16 @@ void Controller::CostmapCallback(const nav_msgs::OccupancyGridConstPtr & msg)
     if(!msg->data.empty())
         costmap = *msg;
 }
-bool Controller::world2Grid(
+void Controller::LocalizeCallback(const std_msgs::BoolConstPtr &msg)
+{
+    if(msg->data && !localized)
+    {
+        localized_time = std::chrono::high_resolution_clock::now();
+        ROS_INFO("------------------------------------------------------");
+    }
+    localized = msg->data;  
+}
+bool world2Grid(
     double wx, double wy, 
     const nav_msgs::OccupancyGrid& costmap, 
     int& gx, int& gy) 
@@ -244,7 +297,7 @@ bool Controller::world2Grid(
 
     return (gx >= 0 && gx < costmap.info.width && gy >= 0 && gy < costmap.info.height);
 }
-bool Controller::Grid2world(int gx, int gy, const nav_msgs::OccupancyGrid& costmap,
+bool Grid2world(int gx, int gy, const nav_msgs::OccupancyGrid& costmap,
                 double& wx, double& wy)
 {
     if (costmap.info.width == 0 || costmap.info.height == 0) return false;
@@ -254,7 +307,7 @@ bool Controller::Grid2world(int gx, int gy, const nav_msgs::OccupancyGrid& costm
 
     return true;   
 }
-bool Controller::Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Path &plan, double search_radius, int threshold, 
+int Controller::Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Path &plan, double search_radius, 
                                     std::vector<ObstacleResult> &result, int forsee_index)
 {
     int count = 0, index = 0;
@@ -272,7 +325,7 @@ bool Controller::Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Pa
             {
                 if (x < 0 || x >= costmap.info.width || y < 0 || y >= costmap.info.height) continue;
                 int index = y * costmap.info.width + x;
-                if(costmap.data[index] > 70) 
+                if(costmap.data[index] > 0) 
                 {
                     obstacle.cost = costmap.data[index];
                     obstacle.grid_x = x;
@@ -293,8 +346,7 @@ bool Controller::Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Pa
         index ++;
     }
     std::cout << "narrow count = " << count << std::endl;
-    if (count < threshold) return true;
-    else return false;
+    return count;
 }
 void Controller::publishObstaclesGrid(const std::vector<ObstacleResult>& obstacles, double resolution, ros::Publisher& pub)
 {
@@ -347,7 +399,7 @@ void Controller::FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs:
             }
 
             prune_index = std::min(prune_index, (int)(path.poses.size()-1));
-            std::cout << "prune_index = " << prune_index << std::endl;
+            //std::cout << "prune_index = " << prune_index << std::endl;
         }
 double Controller::CurvatureCal(const nav_msgs::Path& traj){
     double curvature;
@@ -440,7 +492,9 @@ Controller::~Controller(){}
 int main(int argc,char **argv)
 {
   ros::init(argc, argv, "pid_position_follow");
+  ros::AsyncSpinner spinner_(4);
+  spinner_.start();
   Controller controller;
-  ros::spin();
+  ros::waitForShutdown();
     return 0;
 }

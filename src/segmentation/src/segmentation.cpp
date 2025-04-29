@@ -13,11 +13,13 @@ Obstacle_detector::Obstacle_detector():
     last_scan_sensor(new pcl::PointCloud<pcl::PointXYZ>),
     cropped_scan(new pcl::PointCloud<pcl::PointXYZ>),
     cropped_map(new pcl::PointCloud<pcl::PointXYZ>),
+    costmap_points(new pcl::PointCloud<pcl::PointXY>),
     previous_icp_result(Eigen::Isometry3d::Identity()){
         
     register_ = std::make_shared<small_gicp::Registration<small_gicp::GICPFactor, small_gicp::ParallelReductionOMP>>();
     ros::NodeHandle nh("~");
     nh.param<double>("distance_threshold", distance_threshold, 0.2);
+    nh.param<double>("costmap_distance_threshold", costmap_distance_threshold, 0.05);
     nh.param<std::string>("map_path", map_path, "");
     nh.param<int>("freq", freq, 10);
     nh.param<std::vector<double>>("extrinsic_T", extrinT, std::vector<double>());
@@ -73,6 +75,7 @@ Obstacle_detector::Obstacle_detector():
     obstacle_pub = nh.advertise<sensor_msgs::PointCloud2>("obstacle",10);
     prior_map_pub = nh.advertise<sensor_msgs::PointCloud2>("prior_map",10);
     aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("aligned",10);
+    costmap_sub = nh.subscribe("/move_base/global_costmap/costmap",1, &Obstacle_detector::Costmap_Callback, this);
     tf_listener = std::make_shared<tf::TransformListener>();
     run_timer = nh.createTimer(ros::Duration(1.0/freq),&Obstacle_detector::timer,this);
     if(pcl::io::loadPCDFile<pcl::PointXYZ>(map_path,*prior_map) == -1)
@@ -90,7 +93,6 @@ Obstacle_detector::Obstacle_detector():
         T_map_vice_map.translation().y() = lidar_y;
         pcl::transformPointCloud(*prior_map, *prior_map, T_map_vice_map);
     }
-    //方便KDtree有序存储
     pcl::VoxelGrid<pcl::PointXYZ> downsample;
     downsample.setInputCloud(prior_map);
     downsample.setLeafSize(leaf_size,leaf_size,leaf_size);
@@ -145,10 +147,18 @@ void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_m
     std::cout << "detect_scan size " << scan_map->size() <<std::endl;
     std::cout << "here" << std::endl;
     for (const auto& pt : scan_map->points){
-        std::vector<int> indices(1);
-        std::vector<float> sqr_distance(1);
-        if(kdtree.nearestKSearch(pt, 1, indices, sqr_distance)>0){
-            if (sqrt(sqr_distance[0]) > distance_threshold){
+        std::vector<int> indices_1(1), indices_2{1};
+        std::vector<float> sqr_distance_1(1) ,sqr_distance_2{1};
+        pcl::PointXY flatscan = {pt.x,pt.y};
+        //滤出障碍物，包括地图中静态障碍和动态障碍物
+        if(!costmap_points->empty())
+            if(flat_kdtree.nearestKSearch(flatscan, 1, indices_2, sqr_distance_2)>0)
+                if (sqrt(sqr_distance_2[0]) < costmap_distance_threshold){
+                    //obstacle->push_back(pt);
+                    continue;
+                }           
+        if(kdtree.nearestKSearch(pt, 1, indices_1, sqr_distance_1)>0){
+            if (sqrt(sqr_distance_1[0]) > distance_threshold){
                 obstacle->push_back(pt);
             }
         }
@@ -179,6 +189,11 @@ void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_m
 }
 void Obstacle_detector::timer(const ros::TimerEvent &event){
 
+    if(costmap_points->empty()&& !costmap.data.empty())
+    {
+        grid2pointcloud(costmap,*costmap_points);
+        flat_kdtree.setInputCloud(costmap_points);
+    }
     obstacle->clear();
     geometry_msgs::PoseStamped init_pose;
     geometry_msgs::PoseStamped robot_pose;
@@ -218,7 +233,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
     if(scan_local->size()!=0)
     {
         pcl::transformPointCloud(*scan_local, *scan_map, T_map_sensor);
-        if((abs(box_center.x() - robot_position.x()) > box_size) || (abs(box_center.y() - robot_position.y()) > box_size) )
+        if((abs(box_center.x() - robot_position.x()) > box_size - 1) || (abs(box_center.y() - robot_position.y()) > box_size - 1) )
         {
             box_center = robot_position;
             cloud_crop(filtered_prior_map,box_center,box_size,cropped_map);
@@ -232,19 +247,21 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
         // std::cout<< "box_size " << box_size << std::endl;
         // std::cout << "cropped_scan size " << cropped_scan->size() << std::endl;
         // std::cout << "cropped_map size " << cropped_map->size() << std::endl;
-        if(cropped_scan->size() != 0 && cropped_map->size() != 0)
+        if(cropped_scan->size() != 0 )
         {
             // registration(cropped_scan,cropped_map,leaf_size);
             auto start_time = std::chrono::high_resolution_clock::now();
-            target_cov = small_gicp::voxelgrid_sampling_omp<pcl::PointCloud<pcl::PointXYZ>,pcl::PointCloud<pcl::PointCovariance>>(*cropped_map ,leaf_size, 4);
+            target_cov = small_gicp::voxelgrid_sampling_omp<
+                        pcl::PointCloud<pcl::PointXYZ>,pcl::PointCloud<pcl::PointCovariance>>(*cropped_map ,leaf_size, 4);
             small_gicp::estimate_covariances_omp(*target_cov,2, 4);
             target_tree = std::make_shared<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>>(
                         target_cov, small_gicp::KdTreeBuilderOMP(4));
             source_cov = small_gicp::voxelgrid_sampling_omp<
-            pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::PointCovariance>>(*cropped_scan, leaf_size , 4);
+                        pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::PointCovariance>>(*cropped_scan, leaf_size , 4);
             small_gicp::estimate_covariances_omp(*source_cov, 2, 4);
             source_tree = std::make_shared<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>>(
-            source_cov, small_gicp::KdTreeBuilderOMP(4));
+                        source_cov, small_gicp::KdTreeBuilderOMP(4));
+            
             auto mid_time = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration_mid = mid_time - start_time;
             std::cout << "downsample function took " << duration_mid.count() << " milliseconds" << std::endl;
@@ -257,14 +274,15 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
             std::cout<<"error = "<<result.error<<std::endl;
             std::cout << "registration function took " << duration.count() << " milliseconds" << std::endl;
 
+            if(result.error < 5)
+                detect(cropped_scan);
+
             std::cout << "cropped_scan size " << cropped_scan->size() << std::endl;
             sensor_msgs::PointCloud2 aligned_ros;
-            pcl::toROSMsg(*cropped_scan,aligned_ros);
+            pcl::toROSMsg(*scan_map,aligned_ros);
             aligned_ros.header.frame_id = "map";
             aligned_ros.header.stamp = ros::Time::now();
             aligned_pub.publish(aligned_ros);
-            if(result.error < 5)
-                detect(cropped_scan);
             sensor_msgs::PointCloud2 obstacle_ros;
             pcl::toROSMsg(*obstacle,obstacle_ros);
             obstacle_ros.header.frame_id = "map";
@@ -291,6 +309,24 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
 //     last_scan_timestamp = scan_timestamp;  
 //     scan_timestamp = msg->header.stamp;
 // }
+void Obstacle_detector::grid2pointcloud(const nav_msgs::OccupancyGrid& costmap, pcl::PointCloud<pcl::PointXY>& cloud)
+{
+    for(int y = 0 ; y < costmap.info.height; y++)
+        for(int x = 0; x < costmap.info.width; x++)
+        {
+            int index = y * costmap.info.width + x;
+            std::cout << "cost:" << costmap.data[index]  << std::endl;
+            if(costmap.data[index] > 99)//静态障碍层
+                {            
+                    double wx, wy;
+                    Grid2world(x, y, costmap, wx, wy);
+                    pcl::PointXY flatpoint = {wx,wy};
+                    cloud.push_back(flatpoint);
+
+                }
+        }
+}
+
 void Obstacle_detector::Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg)
 {
     std::lock_guard<std::mutex> lock(scan_mutex);
@@ -299,7 +335,11 @@ void Obstacle_detector::Standard_Scan_Callback(const sensor_msgs::PointCloud2Con
     last_scan_timestamp = scan_timestamp;
     scan_timestamp = msg->header.stamp;
 }
-    
+void Obstacle_detector::Costmap_Callback(const nav_msgs::OccupancyGridConstPtr& msg)
+{
+    if(!msg->data.empty())
+    costmap = *msg;
+}
 int main(int argc, char **argv)
 {
     ros::init(argc,argv,"obstacle_detector");

@@ -31,16 +31,12 @@ public:
     void GlobalPathCallback(const nav_msgs::PathConstPtr & msg);
     void CostmapCallback(const nav_msgs::OccupancyGridConstPtr & msg);
     void MatchCallback(const std_msgs::BoolConstPtr &msg);
+    void LocalizeCallback(const std_msgs::BoolConstPtr &msg);
     void FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs::Path& path, int& prune_index, double prune_ahead_dist);
     void FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
                     const nav_msgs::Path& traj,
                     geometry_msgs::Twist& cmd_vel);
-    bool world2Grid(double wx, double wy, 
-                    const nav_msgs::OccupancyGrid& costmap, 
-                    int& gx, int& gy);
-    bool Grid2world(int gx, int gy, const nav_msgs::OccupancyGrid& costmap,
-                    double& wx, double& wy);
-    bool Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Path &plan, double search_radius, int threshold, 
+    int Passbility_check(nav_msgs::OccupancyGrid &costmap, nav_msgs::Path &plan, double search_radius, 
                           std::vector<ObstacleResult> &result, int forsee_index);// = short_forsee_index
     void publishObstaclesGrid(const std::vector<ObstacleResult>& obstacles, double resolution, ros::Publisher& pub);
     void Plan(const ros::TimerEvent& event);
@@ -57,25 +53,30 @@ private:
     ros::Publisher local_path_pub;
     ros::Publisher forsee_path_pub;
     ros::Publisher obstacle_pub;
-    ros::Publisher followed_pose_pub;
+    ros::Publisher narrow_pub;
     ros::Subscriber diverge_sub;
     ros::Subscriber match_sub;
+    ros::Subscriber localize_success_sub;
     ros::Subscriber global_path_sub;
     ros::Subscriber costmap_sub;
     ros::Timer      plan_timer;
     ros::Timer      optimize_timer;
 
+    std::chrono::_V2::system_clock::time_point localized_time;
     std::shared_ptr<tf::TransformListener> tf_listener;
+    std_msgs::Bool  narrow_msg;
     nav_msgs::OccupancyGrid costmap;
     nav_msgs::Path global_path;
     nav_msgs::Path prune_path;
     nav_msgs::Path opt_path;
     bool narrow = false;
     bool diverge = false;
+    bool localized = false;
     bool plan = false;
     bool turn_state = false;
     bool debug_en;
     int prune_index = 0;
+    int follow_index = 0;
     int forsee_index = 0;
     int short_forsee_index = 0;
     int  narrow_threshold;
@@ -111,7 +112,6 @@ double normalizeRadian(const double angle)
    n_angle = n_angle > M_PI ? n_angle - 2 * M_PI : n_angle < -M_PI ? 2 * M_PI + n_angle : n_angle;
    return n_angle;
 }
-
 double ABS_limit(double value,double limit)
 {
   if(value<limit && value>-limit)
@@ -124,4 +124,9 @@ double ABS_limit(double value,double limit)
   }
 
 }
+bool world2Grid(double wx, double wy, 
+                const nav_msgs::OccupancyGrid& costmap, 
+                int& gx, int& gy);
+bool Grid2world(int gx, int gy, const nav_msgs::OccupancyGrid& costmap,
+                double& wx, double& wy);
 #endif

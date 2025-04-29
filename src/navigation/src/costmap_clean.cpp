@@ -12,7 +12,7 @@ int main(int argc, char **argv){
 	while(ros::ok()){
 		clearClient.call(srv);
 		ROS_INFO("Clear Costmap");
-		ros::Duration(3).sleep();
+		ros::Duration(6).sleep();
 	}
 	
 }
