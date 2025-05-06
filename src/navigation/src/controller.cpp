@@ -166,8 +166,15 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
         tem_prune_path.push_back(robot_pose);
         int j = prune_index;
         while(j < global_path.poses.size() && j - prune_index < forsee_index){
-            tem_prune_path.push_back(global_path.poses[j]);
-            j++;
+            int gx, gy, index;
+            world2Grid(global_path.poses[j].pose.position.x, global_path.poses[j].pose.position.y, costmap, gx, gy);
+            index = gy* costmap.info.width + gx;
+            if(costmap.data[index] == 0)
+                {
+                    tem_prune_path.push_back(global_path.poses[j]);
+                    j++;
+                }
+            else break;
         }
         {
             std::lock_guard<std::mutex> lock(prunepath_mutex);

@@ -5,6 +5,7 @@
 #include <tf2_eigen/tf2_eigen.h>
 #include <pcl/filters/filter_indices.h>
 #include <pcl/filters/passthrough.h>
+#include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/registration/ia_ransac.h>//sac_ia
 #include <pcl/registration/correspondence_estimation.h>
 #include <pcl/registration/correspondence_rejection_features.h> //特征的错误对应关系去除
@@ -12,8 +13,11 @@
 //用的是原始点云
 Relocalization::Relocalization():
     prior_map(new pcl::PointCloud<pcl::PointXYZ>()),
+    prior_obs(new pcl::PointCloud<pcl::PointXYZ>()),
     filtered_prior_map(new pcl::PointCloud<pcl::PointXYZ>()),
+    filtered_prior_obs(new pcl::PointCloud<pcl::PointXYZ>()),
     scan(new pcl::PointCloud<pcl::PointXYZ>()),
+    obs(new pcl::PointCloud<pcl::PointXYZ>()),
     scan_odom(new pcl::PointCloud<pcl::PointXYZ>()),
     high_features_map(new pcl::PointCloud<pcl::PointXYZ>()),
     high_features_scan(new pcl::PointCloud<pcl::PointXYZ>()),
@@ -27,8 +31,10 @@ Relocalization::Relocalization():
     tf_listener = std::make_unique<tf2_ros::TransformListener>(tf2_buffer);
     ros::NodeHandle nh("relocalization");
     nh.param<std::string>("pcd_path", pcd_path, "");
+    nh.param<std::string>("obs_path", obs_path, "");
     nh.param<double>("leaf_size", leaf_size, 0.1);
     nh.param<int>("freq",freq,10);
+    nh.param<int>("max_frame",max_frame,10);
     nh.param<double>("map_leaf_size",map_leaf_size,0.5);
     nh.param<double>("max_dist_sq",max_dist_sq,1);
     nh.param<double>("max_iterations",max_iterations,100);
@@ -44,7 +50,9 @@ Relocalization::Relocalization():
     register_->reduction.num_threads = num_threads;
     register_->rejector.max_dist_sq = max_dist_sq;
     register_->optimizer.max_iterations = max_iterations;
+    obs_sub = nh.subscribe("/ground_segmentation/obstacle_cloud",5,&Relocalization::Obs_Callback,this);
     scan_sub = nh.subscribe("/livox/lidar_ros",5,&Relocalization::Standard_Scan_Callback,this);
+
     initial_pose_sub = nh.subscribe("/initialpose",5,&Relocalization::InitialPoseCallback,this);
     diverge_sub = nh.subscribe("/diverge",5,&Relocalization::Diverge_Callback,this);
     match_sub = nh.subscribe("/match",5,&Relocalization::Match_Callback,this);
@@ -54,7 +62,7 @@ Relocalization::Relocalization():
     align_pub = nh.advertise<sensor_msgs::PointCloud2>("aligned",5);
     localize_success_pub= nh.advertise<std_msgs::Bool>("/localize_success",5);
     localize_success = false;
-    first_time = true;
+    lost = false;
     y_dist = 0;
     previous_error = 0;
     yaw_bias_cnt = 0;
@@ -67,8 +75,16 @@ Relocalization::Relocalization():
     else{
         ROS_INFO("Load PCD file success");
     }
+    if(pcl::io::loadPCDFile(obs_path,*prior_obs)==-1){
+        ROS_ERROR("Load OBS file failed");
+        ros::shutdown();
+    }
+    else{
+        ROS_INFO("Load OBS file success");
+    }
     target_cov = small_gicp::voxelgrid_sampling_omp<pcl::PointCloud<pcl::PointXYZ>,pcl::PointCloud<pcl::PointCovariance>>(*prior_map ,map_leaf_size, num_threads);
     filtered_prior_map = small_gicp::voxelgrid_sampling_omp(*prior_map ,map_leaf_size, 8);
+    filtered_prior_obs = small_gicp::voxelgrid_sampling_omp(*prior_obs ,map_leaf_size, 8);
     // if(use_stl_cloud == false){
     //     T_map_vice_map = Eigen::Isometry3d::Identity();
     //     Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitX());
@@ -101,10 +117,19 @@ void Relocalization::timer(const ros::TimerEvent& event)
 {
     T_vice_map_odom.header.frame_id = "vice_map";
     T_vice_map_odom.child_frame_id = "odom";
-    if(!scan->empty())
+    if(!obs_queue.empty() && !scan->empty())
     {
         if(localize_success == false || diverge.data == true || narrow_rising_edge)
         {
+            {
+                std::lock_guard<std::mutex> lock(obs_mutex);
+                obs->clear();
+                while(!obs_queue.empty())
+                {
+                    *obs += obs_queue.front();
+                    obs_queue.pop();
+                }
+            }
             {
                 std::lock_guard<std::mutex> lock(scan_mutex);
                 Eigen::Affine3d tem(T_odom_lidar);
@@ -112,10 +137,10 @@ void Relocalization::timer(const ros::TimerEvent& event)
             }
             if(narrow_rising_edge)
             {
-                registration(scan_odom, leaf_size, precise_diverge_threshold);  
+                registration(scan_odom, obs, leaf_size, precise_diverge_threshold);  
             }
             else
-                registration(scan_odom, leaf_size, diverge_threshold);     
+                registration(scan_odom, obs, leaf_size, diverge_threshold);     
             Eigen::Quaterniond q(T_map_scan.linear());
             Eigen::Vector3d translation =  T_map_scan.translation();  
 
@@ -165,7 +190,7 @@ void Relocalization::timer(const ros::TimerEvent& event)
     if(debug_en)
     {
         sensor_msgs::PointCloud2 msg_1;
-        pcl::toROSMsg(*filtered_prior_map, msg_1);
+        pcl::toROSMsg(*filtered_prior_obs, msg_1);
         msg_1.header.frame_id = "vice_map";  
         target_pub.publish(msg_1); 
 
@@ -181,18 +206,19 @@ void Relocalization::timer(const ros::TimerEvent& event)
     }
 
 }
-void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, double leaf_size, double threshold)
+void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, const pcl::PointCloud<pcl::PointXYZ>::Ptr &obs, double leaf_size, double threshold)
 {
     auto start_time = std::chrono::high_resolution_clock::now();
-    //icp时过高的点云造成错误匹配
-    pcl::PassThrough<pcl::PointXYZ> passTh;
-    passTh.setInputCloud(source);                                                    // 输入原始点云
-    passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
-    passTh.setFilterLimits(-0.3, 3);                                               // 阈值范围
-    passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
-    passTh.filter(*source); 
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_scan_odom(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_obs(new pcl::PointCloud<pcl::PointXYZ>());
+
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor_;
+    sor_.setInputCloud(obs);
+    sor_.setMeanK(20);
+    sor_.setStddevMulThresh(0.02);
+    sor_.filter(*filtered_obs);
+    filtered_obs = small_gicp::voxelgrid_sampling_omp(*filtered_obs ,leaf_size, 8);
     filtered_scan_odom = small_gicp::voxelgrid_sampling_omp(*source ,leaf_size, 8);
     source_cov = small_gicp::voxelgrid_sampling_omp<
     pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::PointCovariance>>(*source, leaf_size , num_threads);
@@ -201,6 +227,7 @@ void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &sou
     //     pcl::transformPointCloud(*filtered_scan_odom, *filtered_scan_odom, T_map_vice_map);
     // }   
 
+    // pcl::PassThrough<pcl::PointXYZ> passTh;
     // passTh.setInputCloud(filtered_scan_odom);                                                    // 输入原始点云
     // passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
     // passTh.setFilterLimits(0, 3);                                               // 阈值范围
@@ -214,26 +241,28 @@ void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &sou
 
     small_gicp::estimate_covariances_omp(*source_cov, num_neighbors, num_threads);
     source_tree = std::make_shared<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>>(
-    source_cov, small_gicp::KdTreeBuilderOMP(num_threads));
+                source_cov, small_gicp::KdTreeBuilderOMP(num_threads));
     auto mid_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> duration_mid = mid_time - start_time;
     std::cout << "downsample function took " << duration_mid.count() << " milliseconds" << std::endl;
     small_gicp::RegistrationResult result;
     //-------------------针对联盟赛注释掉了粗匹配部分------------------------
-    // if(diverge.data == true && (!first_time))
-    // {
-    //     sac_ia_compute(high_features_scan,high_features_map);
-    //     if(y_dist < 5.25 && fpfh_result.translation().y() > 5.25){
-    //         Eigen::AngleAxis tem(M_PI,Eigen::Vector3d::UnitZ());
-    //         fpfh_result.linear() = tem * fpfh_result.linear().eval();
-    //         fpfh_result.translation().x() = -fpfh_result.translation().x();
-    //         fpfh_result.translation().y() = 10.5-fpfh_result.translation().y();
-    //     }
-    //     result = register_->align(*target_cov,*source_cov,*target_tree,fpfh_result);
-    // }
-    // else
+    if(lost)
+    {
+        sac_ia_compute(filtered_obs,filtered_prior_obs);
+        // if(y_dist < 5.25 && fpfh_result.translation().y() > 5.25){
+        //     Eigen::AngleAxis tem(M_PI,Eigen::Vector3d::UnitZ());
+        //     fpfh_result.linear() = tem * fpfh_result.linear().eval();
+        //     fpfh_result.translation().x() = -fpfh_result.translation().x();
+        //     fpfh_result.translation().y() = 10.5-fpfh_result.translation().y();
+        //     ROS_INFO("-------------HALFCOURT----------------------");
+        // }
+        result = register_->align(*target_cov,*source_cov,*target_tree,fpfh_result);
+        previous_error = 100000.0f;
+        lost = false;
+    }
+    else
         result = register_->align(*target_cov,*source_cov,*target_tree,previous_icp_result);
-    first_time = false;
     T_map_scan = result.T_target_source;
     previous_icp_result = result.T_target_source;
     if(result.error < threshold){
@@ -241,30 +270,32 @@ void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &sou
         narrow_rising_edge = false;
         previous_error = 10000;
         yaw_bias_cnt = 0;
+        lost = false;
     }
     else {
         localize_success = false;
         if(result.error >= previous_error || (previous_error - result.error < 1))//无法收敛时换一个先验位姿
         {
-            previous_error = 100000.0f;
-            // Eigen::Isometry3d T_rotation = Eigen::Isometry3d::Identity();
-            double yaw_bias;
-            if(yaw_bias_cnt % 2 == 0) yaw_bias = (yaw_bias_cnt/2 + 1) * 0.3491f;//每次旋转20度
-            else yaw_bias = -(yaw_bias_cnt/2 + 1) * 0.3491f;
-            std::cout << "-------------------yaw_bias:-------------------" << yaw_bias <<std::endl;
-            double angle_x = 20.0 * M_PI / 180.0;  // 转换为弧度
-            Eigen::AngleAxisd rotate_x(angle_x, Eigen::Vector3d::UnitX());
-            Eigen::Vector3d new_axis = rotate_x * Eigen::Vector3d::UnitZ();
-            Eigen::AngleAxis yaw(yaw_bias,new_axis);
-            T_relocalize.rotate(yaw.toRotationMatrix());
-            previous_icp_result = T_relocalize;
-            yaw_bias_cnt ++; 
+            // previous_error = 100000.0f;
+            // // Eigen::Isometry3d T_rotation = Eigen::Isometry3d::Identity();
+            // double yaw_bias;
+            // if(yaw_bias_cnt % 2 == 0) yaw_bias = (yaw_bias_cnt/2 + 1) * 0.3491f;//每次旋转20度
+            // else yaw_bias = -(yaw_bias_cnt/2 + 1) * 0.3491f;
+            // std::cout << "-------------------yaw_bias:-------------------" << yaw_bias <<std::endl;
+            // double angle_x = 20.0 * M_PI / 180.0;  // 转换为弧度
+            // Eigen::AngleAxisd rotate_x(angle_x, Eigen::Vector3d::UnitX());
+            // Eigen::Vector3d new_axis = rotate_x * Eigen::Vector3d::UnitZ();
+            // Eigen::AngleAxis yaw(yaw_bias,new_axis);
+            // T_relocalize.rotate(yaw.toRotationMatrix());
+            // previous_icp_result = T_relocalize;
+            // yaw_bias_cnt ++; 
+            lost = true;
         }
         else previous_error = result.error;
     }
     if(debug_en){
         Eigen::Affine3d tem(T_map_scan);
-        pcl::transformPointCloud(*filtered_scan_odom,*aligned,tem);   
+        pcl::transformPointCloud(*filtered_obs,*aligned,tem);   
     }
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> duration = end_time - start_time;
@@ -304,17 +335,26 @@ void Relocalization::InitialPoseCallback(const geometry_msgs::PoseWithCovariance
 
 }
 
-void Relocalization::Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg)
-{
-    {   
-        pcl::PointCloud<pcl::PointXYZ> tem;
-        std::lock_guard<std::mutex> lock(scan_mutex);
-        scan->clear();
-        int size = msg->height* msg->width;
-        scan->resize(size);
-        pcl::fromROSMsg(*msg, tem); 
-        *scan = tem;     
+void Relocalization::Obs_Callback(const sensor_msgs::PointCloud2ConstPtr &msg)
+{  
+    pcl::PointCloud<pcl::PointXYZ> tem;
+    pcl::fromROSMsg(*msg, tem); 
+    {
+        std::lock_guard<std::mutex> lock(obs_mutex);
+        obs_queue.push(tem);
+        if(obs_queue.size() > max_frame)
+            obs_queue.pop();
     }
+}
+void Relocalization::Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg)
+{ 
+    pcl::PointCloud<pcl::PointXYZ> tem;
+    std::lock_guard<std::mutex> lock(scan_mutex);
+    scan->clear();
+    int size = msg->height* msg->width;
+    scan->resize(size);
+    pcl::fromROSMsg(*msg, tem); 
+    *scan = tem;     
 }
 void Relocalization::Diverge_Callback(const std_msgs::Bool::ConstPtr &msg)
 {
@@ -346,12 +386,12 @@ void Relocalization::compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &i
     point_normal->clear();
 	est_normal.setInputCloud(input_cloud);
 	est_normal.setSearchMethod(tree);
-    est_normal.setRadiusSearch(1.0);
+    est_normal.setRadiusSearch(1);
 	// est_normal.setKSearch(10);
     est_normal.compute(*point_normal);//计算法向量
 	//fpfh 估计
 	est_fpfh.setNumberOfThreads(4);
-    est_fpfh.setRadiusSearch(1.0);
+    est_fpfh.setRadiusSearch(1);
 	est_fpfh.setInputCloud(input_cloud);
 	est_fpfh.setInputNormals(point_normal);
 	est_fpfh.setSearchMethod(tree);
@@ -387,8 +427,8 @@ pcl::PointCloud<pcl::PointXYZ> Relocalization::sac_ia_compute(pcl::PointCloud<pc
     sac_ia.setCorrespondenceRandomness(20);
     sac_ia.setEuclideanFitnessEpsilon(0.00001);
     sac_ia.setTransformationEpsilon(1e-16);
-    sac_ia.setRANSACIterations(10);
-    sac_ia.setMaximumIterations(3000);
+    sac_ia.setRANSACIterations(100);
+    sac_ia.setMaximumIterations(5000);
     pcl::PointCloud<pcl::PointXYZ> result;
     sac_ia.align(result);
     if (sac_ia.hasConverged()) {

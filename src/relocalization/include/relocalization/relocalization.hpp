@@ -34,12 +34,13 @@ class Relocalization{
 public:
     Relocalization();
     ~Relocalization() = default;
-    void registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, double leaf_size, double threshold);
+    void registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &source, const pcl::PointCloud<pcl::PointXYZ>::Ptr &obs, double leaf_size, double threshold);
     void timer(const ros::TimerEvent& event);
     void Diverge_Callback(const std_msgs::Bool::ConstPtr &msg);
     void Match_Callback(const std_msgs::Bool::ConstPtr &msg);
     void Narrow_Callback(const std_msgs::Bool::ConstPtr &msg);   
     void Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg);
+    void Obs_Callback(const sensor_msgs::PointCloud2ConstPtr &msg);
     void InitialPoseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr msg);
     void compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud, 
                             pcl::search::KdTree<pcl::PointXYZ>::Ptr &tree,
@@ -48,7 +49,7 @@ public:
                                                 pcl::PointCloud<pcl::PointXYZ>::Ptr target_cloud);
 private:
     bool                                        debug_en;
-    bool                                        first_time;
+    bool                                        lost;
     bool                                        localize_success;
     bool                                        use_stl_cloud;
     bool                                        narrow_rising_edge;
@@ -56,7 +57,7 @@ private:
     std_msgs::Bool                              match;  
     std_msgs::Bool                              narrow;
     int                                         freq;
-    int                                         pointcloud_count;
+    int                                         max_frame;
     int                                         num_threads;
     int                                         num_neighbors;
     int                                         yaw_bias_cnt;//挨个尝试初始位姿的计数器
@@ -71,13 +72,17 @@ private:
     double                                      y_dist;
     double                                      previous_error;
     std::string                                 pcd_path;
+    std::string                                 obs_path;
     pcl::PointCloud<pcl::PointXYZ>::Ptr         scan;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr         obs;
     pcl::PointCloud<pcl::PointXYZ>::Ptr         scan_odom;
     pcl::PointCloud<pcl::PointXYZ>::Ptr         aligned;  
     pcl::PointCloud<pcl::PointXYZ>::Ptr         prior_map;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr         prior_obs;
     pcl::PointCloud<pcl::PointXYZ>::Ptr         high_features_map;
     pcl::PointCloud<pcl::PointXYZ>::Ptr         high_features_scan;
     pcl::PointCloud<pcl::PointXYZ>::Ptr         filtered_prior_map;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr         filtered_prior_obs;
     pcl::PointCloud<pcl::PointCovariance>::Ptr  source_cov;
     pcl::PointCloud<pcl::PointCovariance>::Ptr  target_cov;
     pcl::PointCloud<pcl::FPFHSignature33>::Ptr  source_fpfh;
@@ -88,6 +93,7 @@ private:
     std::unique_ptr<tf2_ros::TransformListener> tf_listener;
     std::shared_ptr<small_gicp::Registration<small_gicp::GICPFactor,small_gicp::ParallelReductionOMP>> register_;
     ros::Subscriber                             scan_sub;
+    ros::Subscriber                             obs_sub;
     ros::Subscriber                             initial_pose_sub;
     ros::Subscriber                             diverge_sub;
     ros::Subscriber                             match_sub;
@@ -106,6 +112,8 @@ private:
     Eigen::Isometry3d                           fpfh_result;
     Eigen::Isometry3d                           T_relocalize; 
     std::mutex                                  scan_mutex;
+    std::mutex                                  obs_mutex;
+    std::queue<pcl::PointCloud<pcl::PointXYZ>>  obs_queue;
     pcl::PointCloud<pcl::Normal>::Ptr           point_normal;
     pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> est_normal;
     pcl::FPFHEstimationOMP<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> est_fpfh;

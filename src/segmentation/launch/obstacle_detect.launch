@@ -1,7 +1,7 @@
 <launch>
     <node pkg="segmentation" type="segmentation" name="detector" output="screen">
     <rosparam command="load" file="$(find segmentation)/config/extrinsic.yaml" />
-    <param name="map_path" type="string" value="/home/tjurm/navi_ws/Sentry25NAVI/src/Point-LIO-master/PCD/217stair.pcd"/> 
+    <param name="map_path" type="string" value="/home/tjurm/navi_ws/Sentry25NAVI/src/Point-LIO-master/PCD/RMUC_2025-20.pcd"/> 
     <param name="freq" type="int" value="20"/> 
     <param name="distance_threshold" type="double" value="0.3"/> 
     <param name="costmap_distance_threshold" type="double" value="0.05"/> 

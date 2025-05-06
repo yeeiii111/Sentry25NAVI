@@ -10,35 +10,25 @@ global_costmap:
   transform_tolerance: 0.5
   plugins:
     - {name: static_layer, type: "costmap_2d::StaticLayer"}
-    - {name: obstacle_layer, type: "costmap_2d::VoxelLayer"}
-    - {name: clearing_layer, type: "costmap_2d::VoxelLayer"}
+    - {name: obstacle_layer, type: "costmap_2d::ObstacleLayer"}
     - {name: inflation_layer, type: "costmap_2d::InflationLayer"}
   obstacle_layer:
     enabled: true
-    observation_sources: obstacle_cloud 
+    observation_sources: obstacle_cloud ground_cloud
     track_unknown_space: true
-    obstacle_keep_time: 0.5      # 障碍物保留时间（0.5秒未被检测到则清除）
-    observation_persistence: 0.0   # 仅信任最新传感器数据
-    expected_update_rate: 20.0  
-    max_obstacle_height: 0.25
+    observation_persistence: 3   # 仅信任最新传感器数据
+    expected_update_rate: 10.0  
+    max_obstacle_height: 1
+    min_obstacle_height: -1
     obstacle_cloud:
       sensor_frame: body  
       data_type: PointCloud2
       topic: /ground_segmentation/obstacle_cloud  
       marking: true
-      clearing: true
-  clearing_layer:
-    combination_method: 0
-    enabled: false
-    observation_sources: total_cloud 
-    track_unknown_space: true
-    obstacle_keep_time: 0.5        # 障碍物保留时间（0.5秒未被检测到则清除）
-    observation_persistence: 0.0   # 仅信任最新传感器数据
-    expected_update_rate: 10.0  
-    max_obstacle_height: 2.0 
-    total_cloud:
-      sensor_frame: body
+      clearing: false
+    ground_cloud:
+      sensor_frame: body  
       data_type: PointCloud2
-      topic: /ground_segmentation/obstacle_cloud 
+      topic: /cloud_registered_body 
       marking: false
       clearing: true

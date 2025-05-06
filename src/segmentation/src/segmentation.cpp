@@ -145,18 +145,10 @@ void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_m
     // passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
     // passTh.filter(*scan_map); 
     std::cout << "detect_scan size " << scan_map->size() <<std::endl;
-    std::cout << "here" << std::endl;
     for (const auto& pt : scan_map->points){
         std::vector<int> indices_1(1), indices_2{1};
         std::vector<float> sqr_distance_1(1) ,sqr_distance_2{1};
-        pcl::PointXY flatscan = {pt.x,pt.y};
-        //滤出障碍物，包括地图中静态障碍和动态障碍物
-        if(!costmap_points->empty())
-            if(flat_kdtree.nearestKSearch(flatscan, 1, indices_2, sqr_distance_2)>0)
-                if (sqrt(sqr_distance_2[0]) < costmap_distance_threshold){
-                    //obstacle->push_back(pt);
-                    continue;
-                }           
+        //滤出动态障碍物
         if(kdtree.nearestKSearch(pt, 1, indices_1, sqr_distance_1)>0){
             if (sqrt(sqr_distance_1[0]) > distance_threshold){
                 obstacle->push_back(pt);
@@ -189,11 +181,6 @@ void Obstacle_detector::detect(const pcl::PointCloud<pcl::PointXYZ>::Ptr &scan_m
 }
 void Obstacle_detector::timer(const ros::TimerEvent &event){
 
-    if(costmap_points->empty()&& !costmap.data.empty())
-    {
-        grid2pointcloud(costmap,*costmap_points);
-        flat_kdtree.setInputCloud(costmap_points);
-    }
     obstacle->clear();
     geometry_msgs::PoseStamped init_pose;
     geometry_msgs::PoseStamped robot_pose;

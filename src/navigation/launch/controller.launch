@@ -24,7 +24,7 @@
         <param name="param_convergence_thresh" value="0.01"/>
         <param name="param_max_iterations" value="7000"/>
         <param name="param_max_step" value="0.02"/>
-        <param name="param_repulsive_gain" value="0.000002"/>
+        <param name="param_repulsive_gain" value="0.000008"/>
         <param name="param_attractive_gain" value="2.5"/>
         <param name="param_safe_distance" value="0.2"/>
 
