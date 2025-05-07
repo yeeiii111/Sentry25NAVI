@@ -197,9 +197,9 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
         for( auto& pose: prune_path.poses)
         {
             geometry_msgs::PoseStamped pose_opt;
-            int size = static_cast<int>(prune_path.poses.size());
+            int size = static_cast<int>(global_path.poses.size());
             double ratio;
-            double x = static_cast<double>(size/2 - abs(size/2 - count));
+            double x = static_cast<double>(size/2 - abs(size/2 - (count + prune_index)));
             ratio = 1 - exp(-x * 0.08);
             // std::cout << "ratio:" <<ratio << std::endl;
             if(optimizer_.optimize(obstacle_result, pose, pose_opt, ratio))
@@ -213,9 +213,6 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
             }
             count ++;
         }
-        //起始和终止位置不优化
-        tem_opt_path[0] = prune_path.poses[0];
-        tem_opt_path.back() = prune_path.poses.back();
         //std::cout << "before_local_path_size = " << opt_path.poses.size() << std::endl;
         for(int i = 0; i < static_cast<int>(tem_opt_path.size()) - 1; i++)
         {
@@ -225,13 +222,15 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
                 tem_opt_path.erase(tem_opt_path.begin() + i + 1);
             }
         }
-        {
+        { 
+            
             std::lock_guard<std::mutex> lock(optpath_mutex);
             opt_path.poses.swap(tem_opt_path);
             // opt_path.poses.clear();
             // GenTraj(forcedpath,opt_path,0.05);
         }
-        narrow_msg.data = narrow;
+        //narrow_msg.data = narrow;
+        narrow_msg.data = false;
         narrow_pub.publish(narrow_msg);
         local_path_pub.publish(opt_path);
         follow_index = 0;
@@ -248,7 +247,7 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
 }
 double Controller::YawErrorCal(const geometry_msgs::PoseStamped& robot_pose,
                                 const geometry_msgs::PoseStamped& path_pose){
-    double robot_attitude = anglelimit(tf2::getYaw(robot_pose.pose.orientation) + M_PI_2);
+    double robot_attitude = anglelimit(tf2::getYaw(robot_pose.pose.orientation));
     if(debug_en){
         // std::cout << "robot_attitude:"<<robot_attitude<<std::endl;
     }
@@ -447,7 +446,7 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
         }
         //double diff_yaw = GetYawFromOrientation(traj.poses[0].pose.orientation)- GetYawFromOrientation(robot_pose.pose.orientation);
         int index;
-        //高曲率或狭窄的地方前视距离远一些
+        //高曲率或狭窄的地方前视距离近一些
         if(curvature > 1 || narrow) 
         {
             p_value = curve_p_value;

@@ -16,11 +16,11 @@ global_costmap:
     enabled: true
     observation_sources: obstacle_cloud ground_cloud
     track_unknown_space: true
-    observation_persistence: 3   # 仅信任最新传感器数据
     expected_update_rate: 10.0  
     max_obstacle_height: 1
     min_obstacle_height: -1
     obstacle_cloud:
+      observation_persistence: 3  
       sensor_frame: body  
       data_type: PointCloud2
       topic: /ground_segmentation/obstacle_cloud  

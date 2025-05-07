@@ -8,11 +8,13 @@ Obstacle_detector::Obstacle_detector():
     prior_map (new pcl::PointCloud<pcl::PointXYZ>),
     filtered_prior_map (new pcl::PointCloud<pcl::PointXYZ>),
     obstacle (new pcl::PointCloud<pcl::PointXYZ>),
+    obs (new pcl::PointCloud<pcl::PointXYZ>),
     scan_sensor (new pcl::PointCloud<pcl::PointXYZ>),
     scan_map (new pcl::PointCloud<pcl::PointXYZ>),
     last_scan_sensor(new pcl::PointCloud<pcl::PointXYZ>),
     cropped_scan(new pcl::PointCloud<pcl::PointXYZ>),
     cropped_map(new pcl::PointCloud<pcl::PointXYZ>),
+    cropped_obs(new pcl::PointCloud<pcl::PointXYZ>),
     costmap_points(new pcl::PointCloud<pcl::PointXY>),
     previous_icp_result(Eigen::Isometry3d::Identity()){
         
@@ -68,7 +70,7 @@ Obstacle_detector::Obstacle_detector():
         // scan_sub = nh.subscribe("/livox/lidar",5,&Obstacle_detector::Livox_Scan_Callback,this);
     }
     else{
-        scan_sub = nh.subscribe("/cloud_registered",5,&Obstacle_detector::Standard_Scan_Callback,this);
+        scan_sub = nh.subscribe("/cloud_registered_body",5,&Obstacle_detector::Standard_Scan_Callback,this);
     }
     diverge_pub = nh.advertise<std_msgs::Bool>("/diverge",10);
     match_pub = nh.advertise<std_msgs::Bool>("/match",10);
@@ -76,6 +78,7 @@ Obstacle_detector::Obstacle_detector():
     prior_map_pub = nh.advertise<sensor_msgs::PointCloud2>("prior_map",10);
     aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("aligned",10);
     costmap_sub = nh.subscribe("/move_base/global_costmap/costmap",1, &Obstacle_detector::Costmap_Callback, this);
+    obs_sub = nh.subscribe("/ground_segmentation/obstacle_cloud",1,&Obstacle_detector::Obs_Callback, this);
     tf_listener = std::make_shared<tf::TransformListener>();
     run_timer = nh.createTimer(ros::Duration(1.0/freq),&Obstacle_detector::timer,this);
     if(pcl::io::loadPCDFile<pcl::PointXYZ>(map_path,*prior_map) == -1)
@@ -87,10 +90,10 @@ Obstacle_detector::Obstacle_detector():
     if(use_stl_cloud == false){
         Eigen::Affine3d   T_map_vice_map;
         T_map_vice_map = Eigen::Isometry3d::Identity();
-        Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitX());
+        Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitY());
         T_map_vice_map.linear() = roll.toRotationMatrix();
         T_map_vice_map.translation().z() = lidar_height;
-        T_map_vice_map.translation().y() = lidar_y;
+        T_map_vice_map.translation().x() = lidar_y;
         pcl::transformPointCloud(*prior_map, *prior_map, T_map_vice_map);
     }
     pcl::VoxelGrid<pcl::PointXYZ> downsample;
@@ -188,7 +191,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
         GetTargetPose(tf_listener,"map","base_link",init_pose,last_scan_timestamp);
     }
     else{
-        GetTargetPose(tf_listener,"map","odom",init_pose,last_scan_timestamp);       
+        GetTargetPose(tf_listener,"map","body",init_pose,last_scan_timestamp);       
     }
     GetTargetPose(tf_listener,"map","base_link",robot_pose,last_scan_timestamp);
     Eigen::Vector3d robot_position(
@@ -212,10 +215,15 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
     T_map_sensor = T_map_target;
     //T_map_sensor = T_map_target * T_baselink_sensor;
     pcl::PointCloud<pcl::PointXYZ>::Ptr scan_local (new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr obs_map (new pcl::PointCloud<pcl::PointXYZ>());
     {
         std::lock_guard<std::mutex> lock(scan_mutex);
         if(last_scan_sensor->size()!=0)
             *scan_local = *last_scan_sensor;
+    }
+    {
+        std::lock_guard<std::mutex> lock(obs_mutex);
+        pcl::transformPointCloud(*obs, *obs_map, T_map_sensor);
     }
     if(scan_local->size()!=0)
     {
@@ -225,7 +233,11 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
             box_center = robot_position;
             cloud_crop(filtered_prior_map,box_center,box_size,cropped_map);
         }
-        cloud_crop(scan_map,box_center,box_size,cropped_scan);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_scan, filtered_obs;
+        filtered_scan = small_gicp::voxelgrid_sampling_omp(*scan_map,leaf_size);
+        filtered_obs = small_gicp::voxelgrid_sampling_omp(*obs_map,leaf_size);
+        cloud_crop(filtered_scan,box_center,box_size,cropped_scan);
+        cloud_crop(filtered_obs,box_center,box_size,cropped_obs);
         // cropped_map  = cloud_crop(filtered_prior_map,box_center,box_size);
         // std::cout<< "box_center x " << box_center.x() << std::endl; 
         // std::cout<< "box_center y " << box_center.y() << std::endl;        
@@ -255,26 +267,35 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
             small_gicp::RegistrationResult result;
             result = register_->align(*target_cov,*source_cov,*target_tree,previous_icp_result);
             Eigen::Affine3d T (result.T_target_source);
+            {
+                std::lock_guard<std::mutex> lock(obs_mutex);
+                pcl::transformPointCloud(*cropped_obs,*obstacle,T);
+            }
             pcl::transformPointCloud(*cropped_scan,*cropped_scan,T);
             auto end_time = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = end_time - start_time;
             std::cout<<"error = "<<result.error<<std::endl;
             std::cout << "registration function took " << duration.count() << " milliseconds" << std::endl;
 
-            if(result.error < 5)
-                detect(cropped_scan);
+            // if(result.error < 10)
+            //     detect(cropped_scan);
 
             std::cout << "cropped_scan size " << cropped_scan->size() << std::endl;
             sensor_msgs::PointCloud2 aligned_ros;
-            pcl::toROSMsg(*scan_map,aligned_ros);
+            pcl::toROSMsg(*cropped_scan,aligned_ros);
             aligned_ros.header.frame_id = "map";
             aligned_ros.header.stamp = ros::Time::now();
             aligned_pub.publish(aligned_ros);
             sensor_msgs::PointCloud2 obstacle_ros;
-            pcl::toROSMsg(*obstacle,obstacle_ros);
-            obstacle_ros.header.frame_id = "map";
-            obstacle_ros.header.stamp = ros::Time::now();
-            obstacle_pub.publish(obstacle_ros);
+            //pcl::toROSMsg(*obs,obstacle_ros);
+            if(result.error < 7)
+            {
+                pcl::toROSMsg(*obstacle,obstacle_ros);
+                obstacle_ros.header.frame_id = "map";
+                obstacle_ros.header.stamp = ros::Time::now();
+                obstacle_pub.publish(obstacle_ros);
+            }
+
 
             diverge_pub.publish(diverge);
             match_pub.publish(match);
@@ -326,6 +347,16 @@ void Obstacle_detector::Costmap_Callback(const nav_msgs::OccupancyGridConstPtr& 
 {
     if(!msg->data.empty())
     costmap = *msg;
+}
+void Obstacle_detector::Obs_Callback(const sensor_msgs::PointCloud2ConstPtr &msg)
+{
+    pcl::PointCloud<pcl::PointXYZ> tem;
+    std::lock_guard<std::mutex> lock(obs_mutex);
+    obs->clear();
+    int size = msg->height* msg->width;
+    obs->resize(size);
+    pcl::fromROSMsg(*msg, tem); 
+    *obs = tem;     
 }
 int main(int argc, char **argv)
 {

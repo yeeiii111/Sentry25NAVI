@@ -35,6 +35,7 @@ public:
     void timer(const ros::TimerEvent& event);
     // void Livox_Scan_Callback(const livox_ros_driver2::CustomMsg::ConstPtr &msg);
     void Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg);
+    void Obs_Callback(const sensor_msgs::PointCloud2ConstPtr &msg);
     void Costmap_Callback(const nav_msgs::OccupancyGridConstPtr& msg);
     void grid2pointcloud(const nav_msgs::OccupancyGrid& costmap, pcl::PointCloud<pcl::PointXY>& cloud);
     void cloud_crop(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, Eigen::Vector3d pos, float box_size, pcl::PointCloud<pcl::PointXYZ>::Ptr &result);
@@ -68,11 +69,13 @@ private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr             prior_map;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             filtered_prior_map;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             obstacle;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr             obs;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             scan_sensor;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             last_scan_sensor;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             scan_map;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             cropped_scan;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             cropped_map;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr             cropped_obs;
     pcl::PointCloud<pcl::PointCovariance>::Ptr      source_cov;
     pcl::PointCloud<pcl::PointCovariance>::Ptr      target_cov;
     std::shared_ptr<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>> target_tree;
@@ -87,6 +90,7 @@ private:
     ros::Publisher                                  diverge_pub;
     ros::Publisher                                  match_pub;//点云匹配上一定match，没匹配上可能是里程计退化也可能只是瞬间角速度太大，所以用两个标志位描述定位状态
     ros::Subscriber                                 scan_sub;
+    ros::Subscriber                                 obs_sub;
     ros::Subscriber                                 costmap_sub;
     nav_msgs::OccupancyGrid                         costmap;
     std::chrono::time_point<std::chrono::high_resolution_clock>     match_time;
@@ -99,6 +103,7 @@ private:
     Eigen::Isometry3d                               T_baselink_IMU;
     Eigen::Isometry3d                               T_map_odom;
     std::mutex                                      scan_mutex;
+    std::mutex                                      obs_mutex;
 };
 bool Grid2world(int gx, int gy, const nav_msgs::OccupancyGrid& costmap,
                 double& wx, double& wy)

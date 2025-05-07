@@ -386,7 +386,7 @@ void Relocalization::compute_fpfh_feature(pcl::PointCloud<pcl::PointXYZ>::Ptr &i
     point_normal->clear();
 	est_normal.setInputCloud(input_cloud);
 	est_normal.setSearchMethod(tree);
-    est_normal.setRadiusSearch(1);
+    est_normal.setRadiusSearch(0.5);
 	// est_normal.setKSearch(10);
     est_normal.compute(*point_normal);//计算法向量
 	//fpfh 估计
@@ -414,21 +414,20 @@ pcl::PointCloud<pcl::PointXYZ> Relocalization::sac_ia_compute(pcl::PointCloud<pc
     // *target_iss = ISS_compute(target_cloud,tree);
     compute_fpfh_feature(source_cloud,tree,source_fpfh);
     compute_fpfh_feature(target_cloud,tree,target_fpfh);
-    auto mid_time = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> duration_mid = mid_time - start_time;
-    std::cout << "fpfh feature compute function took " << duration_mid.count() << " milliseconds" << std::endl;
 
     pcl::SampleConsensusInitialAlignment<pcl::PointXYZ, pcl::PointXYZ, pcl::FPFHSignature33> sac_ia;
     sac_ia.setInputSource(source_cloud);
 	sac_ia.setSourceFeatures(source_fpfh);
     sac_ia.setInputTarget(target_cloud);
     sac_ia.setTargetFeatures(target_fpfh);
-    sac_ia.setNumberOfSamples(50);
+    sac_ia.setNumberOfSamples(30);
+    sac_ia.setMinSampleDistance(1);
     sac_ia.setCorrespondenceRandomness(20);
     sac_ia.setEuclideanFitnessEpsilon(0.00001);
-    sac_ia.setTransformationEpsilon(1e-16);
-    sac_ia.setRANSACIterations(100);
-    sac_ia.setMaximumIterations(5000);
+    sac_ia.setTransformationEpsilon(1e-8);
+    sac_ia.setRANSACIterations(500);
+    sac_ia.setMaximumIterations(2000);
+    
     pcl::PointCloud<pcl::PointXYZ> result;
     sac_ia.align(result);
     if (sac_ia.hasConverged()) {
@@ -453,6 +452,9 @@ pcl::PointCloud<pcl::PointXYZ> Relocalization::sac_ia_compute(pcl::PointCloud<pc
         // msg_2.header.frame_id = "map";   
   
     }
+    auto mid_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> duration_mid = mid_time - start_time;
+    std::cout << "sac_ia compute function took " << duration_mid.count() << " milliseconds" << std::endl;
 
     return result;
 }

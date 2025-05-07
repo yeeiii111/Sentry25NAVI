@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<launch>
+    <node pkg="tf" type="static_transform_publisher" name="odom2camera_init" args="0 0 0 0 0 0 odom camera_init 0.1" />
+    <node pkg="tf" type="static_transform_publisher" name="baselink2body" args="-0.068 0 -0.365 0 -0.3491 0 body base_link  0.1" />
+    <node pkg="tf" type="static_transform_publisher" name="vicemap2map"  args="0.189 0 0.320 0 0.3491 0 map vice_map 0.1" />
+</launch>
