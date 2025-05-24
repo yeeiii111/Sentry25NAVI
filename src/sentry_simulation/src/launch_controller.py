@@ -45,6 +45,8 @@ class LaunchController:
             self.localize_state = True
         else:
             self.localize_state = False
+        if self.localize_state and (not self.former_localize_state) :
+            self.restart_launch(point_lio_path, "point_lio") 
     def signal_handler(self, sig, frame):
         """处理Ctrl+C信号"""
         rospy.loginfo("Ctrl+C detected, stopping all launch files...")
@@ -72,7 +74,7 @@ if __name__ == "__main__":
     navi_path = package_path + "/launch/simu_navi.launch"
     controller.start_launch(navi_path, "navi") 
     controller_path = package_path +"/launch/controller.launch"
-    # controller.start_launch(controller_path, "controller") 
+    controller.start_launch(controller_path, "controller") 
 
     package_path = rospack.get_path("relocalization")
     localize_path = package_path + "/launch/relocalization.launch"
@@ -80,16 +82,18 @@ if __name__ == "__main__":
 
     package_path = rospack.get_path("segmentation")
     segmentation_path = package_path + "/launch/obstacle_detect.launch"
-    # controller.start_launch(segmentation_path, "segmentation")     
+    controller.start_launch(segmentation_path, "segmentation")     
 
-
+    # package_path = rospack.get_path("linefit_ground_segmentation_ros")
+    # ground_segmentation_path = package_path + "/launch/segmentation.launch"
+    #controller.start_launch(ground_segmentation_path, "ground_segmentation") 
     # 订阅一个话题
-    controller.localize_sub = rospy.Subscriber("/localize_success", Bool, controller.topic_callback)
+    controller.localize_sub = rospy.Subscriber("/localize_success", Bool, controller.topic_callback, queue_size= 30);
     # 检查话题值并重新启动launch文件
     rate = rospy.Rate(1000)  # 10 Hz
     while not rospy.is_shutdown():
-        if controller.localize_state and (not controller.former_localize_state) :
-            controller.restart_launch(point_lio_path, "point_lio")    
+        # if controller.localize_state and (not controller.former_localize_state) :
+        #     controller.restart_launch(point_lio_path, "point_lio")    
         rate.sleep()
     # 停止所有launch文件
     controller.stop_all_launches()

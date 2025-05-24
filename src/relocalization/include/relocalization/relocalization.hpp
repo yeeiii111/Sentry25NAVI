@@ -8,6 +8,7 @@
 #include <ros/ros.h>
 #include <std_msgs/Bool.h>
 #include <mutex>
+#include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <tf2_ros/transform_broadcaster.h>
@@ -38,7 +39,7 @@ public:
     void timer(const ros::TimerEvent& event);
     void Diverge_Callback(const std_msgs::Bool::ConstPtr &msg);
     void Match_Callback(const std_msgs::Bool::ConstPtr &msg);
-    void Narrow_Callback(const std_msgs::Bool::ConstPtr &msg);   
+    void Body_Pose_Callback(const geometry_msgs::PoseStamped &msg);   
     void Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg);
     void Obs_Callback(const sensor_msgs::PointCloud2ConstPtr &msg);
     void InitialPoseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr msg);
@@ -50,12 +51,11 @@ public:
 private:
     bool                                        debug_en;
     bool                                        lost;
+    bool                                        last_diverge_data;
     bool                                        localize_success;
     bool                                        use_stl_cloud;
-    bool                                        narrow_rising_edge;
     std_msgs::Bool                              diverge;
     std_msgs::Bool                              match;  
-    std_msgs::Bool                              narrow;
     int                                         freq;
     int                                         max_frame;
     int                                         num_threads;
@@ -97,7 +97,7 @@ private:
     ros::Subscriber                             initial_pose_sub;
     ros::Subscriber                             diverge_sub;
     ros::Subscriber                             match_sub;
-    ros::Subscriber                             narrow_sub;
+    ros::Subscriber                             odom_sub;
     ros::Publisher                              target_pub;
     ros::Publisher                              source_pub;
     ros::Publisher                              align_pub;

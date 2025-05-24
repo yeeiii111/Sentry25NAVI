@@ -20,6 +20,7 @@ Panels:
         - /Pose1
         - /MarkerArray1
         - /MarkerArray2
+        - /Marker1
       Splitter Ratio: 0.5058823823928833
     Tree Height: 439
   - Class: rviz/Selection
@@ -78,8 +79,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 0.25630348920822144
-        Min Value: -0.04179845750331879
+        Max Value: 2.089675188064575
+        Min Value: -0.20065242052078247
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -290,6 +291,14 @@ Visualization Manager:
         {}
       Queue Size: 100
       Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /move_base/new_goal
+      Name: Marker
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -318,7 +327,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 20.884361267089844
+      Distance: 11.53569507598877
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -326,17 +335,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0
+        X: 0.29202699661254883
+        Y: -1.8358826637268066
+        Z: -0.8581670522689819
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.1447967290878296
+      Pitch: 1.5497961044311523
       Target Frame: <Fixed Frame>
-      Yaw: 4.625462055206299
+      Yaw: 3.1304686069488525
     Saved: ~
 Window Geometry:
   Displays:

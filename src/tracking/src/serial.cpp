@@ -3,11 +3,14 @@
 #include "tracking/gimbal_serial.hpp"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/Twist.h"
+#include "std_msgs/Int32.h"
 
 #define FRAME_REFREE_HEADER 0Xa5
 #define FRAME_REFREE_TAILER 0xff
 #define DEBUG_EN            true
 serial::Serial gimbal_serial;
+int32_t integer_goal;
+bool pub;
 gimbal_serial_msg::serial_receive_msg received_msg;
 gimbal_serial_msg::serial_send_msg send_msg;
 geometry_msgs::PoseStamped goal;
@@ -29,6 +32,13 @@ void cmd_velCallback(geometry_msgs::TwistConstPtr msg)
     std::cout<< "v_y:"<<send_msg.v_y<<std::endl;
     std::cout<< "w_z:"<<send_msg.w_z <<std::endl;
 }
+}
+void GoalCallback(std_msgs::Int32ConstPtr msg){
+    integer_goal = msg->data;
+}
+void pubfuc(const ros::TimerEvent& event)
+{
+    pub = true;
 }
 int main(int argc, char  *argv[])
 {
@@ -61,8 +71,11 @@ int main(int argc, char  *argv[])
         return -1;
     }
     ros::Subscriber vel_sub = nh.subscribe("/cmd_vel", 10, cmd_velCallback);
+    ros::Subscriber escape_vel_sub = nh.subscribe("/escape_vel", 10, cmd_velCallback);
+    ros::Subscriber goal_sub = nh.subscribe("/integer_topic", 10, GoalCallback);
     ros::Publisher goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal",1);
-    
+    ros::Publisher goal_backup_pub = nh.advertise<geometry_msgs::PoseStamped>("/goal_backup",1);
+    ros::Timer pub_timer = nh.createTimer(ros::Duration(15),pubfuc);
     int count = 0;
     send_msg.header = FRAME_REFREE_HEADER;
     send_msg.tailer = FRAME_REFREE_TAILER;
@@ -97,8 +110,8 @@ int main(int argc, char  *argv[])
             if(received_msg.goal == 1 )   
             {
                 goal.pose.position.z = 0.0;
-                goal.pose.position.y = 1.94381;
-                goal.pose.position.x = 5.07933;
+                goal.pose.position.y = -0.41;
+                goal.pose.position.x = 3.29;
                 goal.pose.orientation.z = 0.850299;
                 goal.pose.orientation.y = 0;
                 goal.pose.orientation.x = 0;
@@ -109,8 +122,8 @@ int main(int argc, char  *argv[])
             if(received_msg.goal == 2 )   
             {
                 goal.pose.position.z = 0.0;
-                goal.pose.position.y = 4.664;
-                goal.pose.position.x = 3.167;
+                goal.pose.position.y = 1.37;
+                goal.pose.position.x = 3.09;
                 goal.pose.orientation.z = 0.8038;
                 goal.pose.orientation.y = 0;
                 goal.pose.orientation.x = 0;
@@ -121,8 +134,8 @@ int main(int argc, char  *argv[])
             if(received_msg.goal == 3 )   
             {
                 goal.pose.position.z = 0.0;
-                goal.pose.position.y = 6.96536;
-                goal.pose.position.x = 1.10679;
+                goal.pose.position.y = 3.40679;
+                goal.pose.position.x = 6.38536;
                 goal.pose.orientation.z = 0.48288;
                 goal.pose.orientation.y = 0;
                 goal.pose.orientation.x = 0;
@@ -181,7 +194,11 @@ int main(int argc, char  *argv[])
             // }
             goal.header.frame_id = "map";
             goal.header.stamp = ros::Time::now();
-            goal_pub.publish(goal);
+            if(pub == true){
+                goal_pub.publish(goal);
+                goal_backup_pub.publish(goal);
+                pub =false;
+            }
             ROS_INFO("publish goal");
             if(DEBUG_EN){
                 std::cout<< "header:"<<static_cast<unsigned int>(received_msg.header) <<std::endl;

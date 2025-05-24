@@ -1,6 +1,6 @@
 image: 505.pgm
 resolution: 0.030000
-origin: [-3.780000, -2.700000, 0]
+origin: [-6.180000, -9.360000, 0]
 negate: 0
 occupied_thresh: 0.65
 free_thresh: 0.196

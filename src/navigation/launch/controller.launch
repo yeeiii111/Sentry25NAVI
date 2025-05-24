@@ -5,14 +5,13 @@
         <param name="plan_frequency" value="100"/>
         <param name="opt_freq" value="5"/>
         <param name="set_yaw_speed" value="0"/>
-        <param name="goal_dist_tolerance" value="0.2"/>
-        <param name="turn_tolerance" value="0.3"/>
+        <param name="goal_dist_tolerance" value="0.3"/>
         <param name="prune_ahead_distance" value="2"/>
-        <param name="straight_p_value" value="30"/>
-        <param name="curve_p_value" value="6"/>
+        <param name="straight_p_value" value="10"/>
+        <param name="curve_p_value" value="3"/>
         <param name="wz_p_value" value="1"/>
         <param name="wz_d_value" value="0.05"/>
-        <param name="max_speed" value="0.5"/>
+        <param name="max_speed" value="1"/>
         <param name="wz_const" value="1"/>
         <param name="debug_en" value="false"/>
         <param name="straight_foresee_index" value="10"/>
@@ -24,8 +23,8 @@
         <param name="param_convergence_thresh" value="0.01"/>
         <param name="param_max_iterations" value="7000"/>
         <param name="param_max_step" value="0.02"/>
-        <param name="param_repulsive_gain" value="0.000004"/>
-        <param name="param_attractive_gain" value="3.5"/>
+        <param name="param_repulsive_gain" value="0.000003"/>
+        <param name="param_attractive_gain" value="3.3"/>
         <param name="param_safe_distance" value="0.15"/>
 
     </node>

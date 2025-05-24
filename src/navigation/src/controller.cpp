@@ -26,6 +26,8 @@ Controller::Controller()
     nh.param<double>("param_repulsive_gain",param_.repulsive_gain, 0.02);
     nh.param<double>("param_attractive_gain",param_.attractive_gain, 0.02);   
     nh.param<double>("param_safe_distance",param_.safe_distance, 0.5);
+    nh.param<double>("min_recover_radius", min_recover_radius , 0.1);
+    nh.param<double>("max_recover_radius", max_recover_radius , 0.4);
     nh.param<int>("opt_freq", opt_freq, 3);
     prune_path_pub = nh.advertise<nav_msgs::Path>("prune_path",5);
     narrow_pub = nh.advertise<std_msgs::Bool>("narrow",5);
@@ -38,6 +40,7 @@ Controller::Controller()
     match_sub = nh.subscribe("/match",5,&Controller::MatchCallback,this);
     costmap_sub = nh.subscribe("//move_base/global_costmap/costmap", 1, &Controller::CostmapCallback, this);
     localize_success_sub = nh.subscribe("/localize_success",5, &Controller::LocalizeCallback, this);
+    global_status_sub = nh.subscribe("/move_base/status",5,&Controller::StatusCallback,this);
     tf_listener = std::make_shared<tf::TransformListener>();
     plan_timer = nh.createTimer(ros::Duration(1.0/plan_freq),&Controller::Plan,this);
     optimize_timer = nh.createTimer(ros::Duration(1.0/opt_freq),&Controller::PathOptimaze,this);
@@ -50,27 +53,29 @@ Controller::Controller()
 
 void Controller::Plan(const ros::TimerEvent& event){
 
-    if(plan && !prune_path.poses.empty() && !opt_path.poses.empty()){
+    if(plan && !prune_path.poses.empty() && !opt_path.poses.empty() ){
         // ROS_INFO("plan_start");
         auto start = ros::Time::now();
         geometry_msgs::PoseStamped robot_pose;
         GetTargetRobotPose(tf_listener, global_path.header.frame_id, robot_pose);
         double EuclideanDistance = GetEuclideanDistance(robot_pose,global_path.poses.back());
         if (EuclideanDistance <= goal_dist_tolerance
-            || prune_index == global_path.poses.size() - 1){
+            || prune_index == global_path.poses.size() - 1 || (EuclideanDistance <= goal_dist_tolerance + 0.1 && arrive_state == true)){
             // plan = false;
             geometry_msgs::Twist cmd_vel;
             cmd_vel.linear.x = 0;
             cmd_vel.linear.y = 0;
-            cmd_vel.linear.z = 0;
+            cmd_vel.linear.z = 1;
             cmd_vel.angular.z = set_yaw_speed;
             cmd_vel_pub.publish(cmd_vel);
             std::cout << cmd_vel.linear.z << std::endl;
             ROS_INFO("Planning Success!");
             prune_index = 0;
             follow_index = 0;
+            arrive_state = true;
             return;
         }
+        arrive_state = false;
         auto time = std::chrono::high_resolution_clock::now();
         if(!localized ||  (time - localized_time < std::chrono::milliseconds(5000))) 
         {
@@ -80,6 +85,7 @@ void Controller::Plan(const ros::TimerEvent& event){
             cmd_vel.linear.z = 0;
             cmd_vel.angular.z = 0;
             cmd_vel_pub.publish(cmd_vel);
+            ROS_WARN("STOP!!!");
             return;
         }
         //原GenTraj函数有时会在local path中加入Nan点，导致后续错误，删除这些点有时会导致路经平滑失败，即localpath为空
@@ -96,18 +102,19 @@ void Controller::Plan(const ros::TimerEvent& event){
             // std::cout << i << std::endl;
         }
         curvature = CurvatureCal(prune_opt_path);
-        //std::cout << "curvature = " << curvature << std::endl;
+        std::cout << "curvature = " << curvature << std::endl;
 
         //朝向与前进方向相差过大时要先调整雷达方向
-        int index = std::min(static_cast<int>(prune_opt_path.poses.size()), 10);
-        if((abs(YawErrorCal(robot_pose,prune_opt_path.poses[index])) > M_PI/2) || ((abs(YawErrorCal(robot_pose,prune_opt_path.poses[index])) > M_PI/36) && narrow) || turn_state)
+        int index = std::min(static_cast<int>(prune_opt_path.poses.size()) - 1, 10);
+        if(((abs(YawErrorCal(robot_pose,prune_opt_path.poses[index])) > M_PI/2) || ((abs(YawErrorCal(robot_pose,prune_opt_path.poses[index])) > M_PI/3) && narrow) || turn_state) 
+            && EuclideanDistance > 1.0)
         {
             double error = YawErrorCal(robot_pose,prune_opt_path.poses[index]);
             if(abs(error) < M_PI/6 && (!narrow)){
                 turn_state = false;
                 return;
             }
-            else if(abs(error) < M_PI/40 && (narrow)){
+            else if(abs(error) < M_PI/6 && (narrow)){
                 turn_state = false;
                 return;
             }
@@ -131,9 +138,12 @@ void Controller::Plan(const ros::TimerEvent& event){
 
         geometry_msgs::Twist cmd_vel;
         FollowTraj(robot_pose, prune_opt_path, cmd_vel);
-        // cmd_vel.linear.x = 0;
-        // cmd_vel.linear.y = 0;
-        if(narrow) cmd_vel.linear.z = 2;
+        if(EuclideanDistance < 1.0)
+        {
+            cmd_vel.linear.x = cmd_vel.linear.x * EuclideanDistance;
+            cmd_vel.linear.y = cmd_vel.linear.y * EuclideanDistance;
+            cmd_vel.angular.z = cmd_vel.angular.z * EuclideanDistance;
+        }
         cmd_vel_pub.publish(cmd_vel);
     }   
     else{
@@ -155,7 +165,7 @@ void Controller::Plan(const ros::TimerEvent& event){
 }
 void Controller::PathOptimaze(const ros::TimerEvent& event)
 {
-    if(plan && localized)
+    if(plan && localized && (global_planner_status != 4))
     {
         geometry_msgs::PoseStamped robot_pose;
         nav_msgs::Path forcedpath;
@@ -163,7 +173,7 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
         GetTargetRobotPose(tf_listener, global_path.header.frame_id, robot_pose);
         FindNearstPose(robot_pose,global_path,prune_index, prune_ahead_dist);
 
-        tem_prune_path.push_back(robot_pose);
+        //tem_prune_path.push_back(robot_pose);
         int j = prune_index;
         while(j < global_path.poses.size() && j - prune_index < forsee_index){
             int gx, gy, index;
@@ -217,7 +227,7 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
         for(int i = 0; i < static_cast<int>(tem_opt_path.size()) - 1; i++)
         {
             while (i + 1 < tem_opt_path.size() && 
-            GetEuclideanDistance(tem_opt_path[i], tem_opt_path[i+1]) < 0.02)
+            GetEuclideanDistance(tem_opt_path[i], tem_opt_path[i+1]) < 0.05)
             {
                 tem_opt_path.erase(tem_opt_path.begin() + i + 1);
             }
@@ -254,7 +264,12 @@ double Controller::YawErrorCal(const geometry_msgs::PoseStamped& robot_pose,
     double dx = path_pose.pose.position.x - robot_pose.pose.position.x;
     double dy = path_pose.pose.position.y - robot_pose.pose.position.y;
     double path_attitude = atan2(dy, dx);
-    if(std::isnan(path_attitude))ROS_ERROR("path_attitude NAN");
+    if(std::isnan(path_attitude))
+    {
+        ROS_ERROR("path_attitude NAN");
+        std::cout << dx << " " << dy << std::endl;
+        return 0;
+    }
 
     //double path_attitude = atan2(path.poses.back().pose.position.y , path.poses.back().pose.position.x );
     return anglelimit(path_attitude - robot_attitude);
@@ -291,6 +306,18 @@ void Controller::LocalizeCallback(const std_msgs::BoolConstPtr &msg)
     }
     localized = msg->data;  
 }
+void Controller::StatusCallback(const actionlib_msgs::GoalStatusArray& msg)
+{
+    if (!msg.status_list.empty()) {
+    global_planner_status = msg.status_list.back().status;
+    // if (global_planner_status == 3) {
+    //     ROS_INFO("Goal reached!");
+    // } else if (global_planner_status == 4) {
+    //     ROS_ERROR("Navigation aborted!");
+    // }
+}
+}
+
 bool world2Grid(
     double wx, double wy, 
     const nav_msgs::OccupancyGrid& costmap, 
@@ -406,13 +433,48 @@ void Controller::FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs:
 
             prune_index = std::min(prune_index, (int)(path.poses.size()-1));
             //std::cout << "prune_index = " << prune_index << std::endl;
-        }
+}
+geometry_msgs::PoseStamped Controller::FindNearstFreeSpace(geometry_msgs::PoseStamped& robot_pose, nav_msgs::OccupancyGrid &costmap, double min_radius, double max_radius)
+{
+    int grid_x, grid_y;
+    if(!world2Grid(robot_pose.pose.position.x, robot_pose.pose.position.y, costmap, grid_x, grid_y)) {
+        ROS_ERROR("UANBLE TO TRANSFORM WORLD INTO GRID");
+        return robot_pose;
+    };
+    int min_grid_r, max_grid_r;
+    min_grid_r = min_radius / costmap.info.resolution;
+    max_grid_r = max_radius / costmap.info.resolution;
+    for (int i = min_grid_r; i <= max_grid_r; i ++)
+    {
+        for(int x = grid_x - i; x <= grid_x + i; x ++)
+            for(int y = grid_y - i; y <= grid_y + i; y++)
+            {
+                if (x < 0 || x >= costmap.info.width || y < 0 || y >= costmap.info.height) continue;
+                int index = y * costmap.info.width + x;
+                if(costmap.data[index] == 0) 
+                {
+                    double wx, wy;
+                    Grid2world(x,y,costmap,wx,wy);
+                    geometry_msgs::PoseStamped goal;
+                    goal.header.frame_id = costmap.header.frame_id;
+                    goal.header.stamp = ros::Time();
+                    goal.pose.position.x = wx;
+                    goal.pose.position.y = wy;
+                    goal.pose.position.z = 0;
+                    goal.pose.orientation = robot_pose.pose.orientation;
+                    return goal;
+                }
+            }
+    }
+    ROS_ERROR("failed to find freepose");
+    return robot_pose;
+
+}
 double Controller::CurvatureCal(const nav_msgs::Path& traj){
     double curvature;
-    if(30 < traj.poses.size())
-    {
-        curvature = computeCurvature(traj.poses[0],traj.poses[5],traj.poses[10]);
-    }
+    double index = std::min(20, static_cast<int>(traj.poses.size() - 1));
+    if (index > 10)
+        curvature = computeCurvature(traj.poses[0],traj.poses[index/2],traj.poses[index]);
     else curvature = 0;
     return curvature;
 }
@@ -447,15 +509,15 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
         //double diff_yaw = GetYawFromOrientation(traj.poses[0].pose.orientation)- GetYawFromOrientation(robot_pose.pose.orientation);
         int index;
         //高曲率或狭窄的地方前视距离近一些
-        if(curvature > 1 || narrow) 
+        if(curvature > 0.7 || narrow) 
         {
             p_value = curve_p_value;
-            index = std::min(curve_foresee_index, static_cast<int>(traj.poses.size()));
+            index = std::min(curve_foresee_index, static_cast<int>(traj.poses.size() - 1));
         }
         else 
         {
             p_value = straight_p_value;
-            index = std::min(straight_foresee_index, static_cast<int>(traj.poses.size()));
+            index = std::min(straight_foresee_index, static_cast<int>(traj.poses.size() - 1));
         }
         // followed_pose_pub.publish(traj.poses[index]);
         double diff_yaw = atan2((traj.poses[index].pose.position.y-robot_pose.pose.position.y ),( traj.poses[index].pose.position.x-robot_pose.pose.position.x));

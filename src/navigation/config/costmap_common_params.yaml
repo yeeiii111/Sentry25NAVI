@@ -1,6 +1,5 @@
 obstacle_range: 2
 raytrace_range: 10
-
 #robot_radius: ir_of_robot
 inflation_radius: 0.2
 # obstacles_layer:

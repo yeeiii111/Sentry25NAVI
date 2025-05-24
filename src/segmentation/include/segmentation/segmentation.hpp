@@ -44,6 +44,7 @@ private:
     double                                          costmap_distance_threshold = 0.05;
     double                                          leaf_size;
     double                                          diverge_threshold;
+    double                                          high_match_threshold;
     double                                          lidar_height;
     double                                          lidar_roll;
     double                                          lidar_y;
@@ -52,22 +53,27 @@ private:
     float                                           box_size;
     int                                             min_diverge_num;
     int                                             freq;
+    bool                                            high_match;
     bool                                            use_stl_cloud;
     bool                                            prior_map_pub_en;
     bool                                            use_livox_cloud;
     bool                                            debug_en;
+    bool                                            align_en;
     std_msgs::Bool                                  diverge;
     std_msgs::Bool                                  match;
     pcl::KdTreeFLANN<pcl::PointXYZ>                 kdtree;
     pcl::KdTreeFLANN<pcl::PointXY>                  flat_kdtree;
     std::string                                     map_path;
+    std::string                                     hole_path;
     ros::Timer                                      run_timer;
     ros::Time                                       scan_timestamp;
     ros::Time                                       last_scan_timestamp;
     Eigen::Vector3d                                 box_center;
     pcl::PointCloud<pcl::PointXY>::Ptr              costmap_points;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             prior_map;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr             hole;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             filtered_prior_map;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr             filtered_hole;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             obstacle;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             obs;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             scan_sensor;
@@ -88,10 +94,10 @@ private:
     ros::Publisher                                  prior_map_pub;
     ros::Publisher                                  aligned_pub;
     ros::Publisher                                  diverge_pub;
+    ros::Publisher                                  body_frame_pub;
     ros::Publisher                                  match_pub;//点云匹配上一定match，没匹配上可能是里程计退化也可能只是瞬间角速度太大，所以用两个标志位描述定位状态
     ros::Subscriber                                 scan_sub;
     ros::Subscriber                                 obs_sub;
-    ros::Subscriber                                 costmap_sub;
     nav_msgs::OccupancyGrid                         costmap;
     std::chrono::time_point<std::chrono::high_resolution_clock>     match_time;
     std::vector<double>                             extrinT;

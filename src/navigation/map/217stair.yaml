@@ -1,7 +1,0 @@
-image: 217stair.pgm
-resolution: 0.030000
-origin: [-8.880000, -7.560000, 0]
-negate: 0
-occupied_thresh: 0.65
-free_thresh: 0.196
-

@@ -11,6 +11,7 @@
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/GridCells.h>
+#include <actionlib_msgs/GoalStatusArray.h>
 #include "sensor_msgs/JointState.h"
 
 #include "utility.hpp"
@@ -32,7 +33,11 @@ public:
     void CostmapCallback(const nav_msgs::OccupancyGridConstPtr & msg);
     void MatchCallback(const std_msgs::BoolConstPtr &msg);
     void LocalizeCallback(const std_msgs::BoolConstPtr &msg);
+    void StatusCallback(const actionlib_msgs::GoalStatusArray& msg);
+
     void FindNearstPose(geometry_msgs::PoseStamped& robot_pose,nav_msgs::Path& path, int& prune_index, double prune_ahead_dist);
+    geometry_msgs::PoseStamped FindNearstFreeSpace(geometry_msgs::PoseStamped& robot_pose, nav_msgs::OccupancyGrid &costmap, double min_radius, double max_radius);
+
     void FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
                     const nav_msgs::Path& traj,
                     geometry_msgs::Twist& cmd_vel);
@@ -59,6 +64,7 @@ private:
     ros::Subscriber localize_success_sub;
     ros::Subscriber global_path_sub;
     ros::Subscriber costmap_sub;
+    ros::Subscriber global_status_sub;
     ros::Timer      plan_timer;
     ros::Timer      optimize_timer;
 
@@ -69,16 +75,19 @@ private:
     nav_msgs::Path global_path;
     nav_msgs::Path prune_path;
     nav_msgs::Path opt_path;
+    int  global_planner_status;
     bool narrow = false;
     bool diverge = false;
     bool localized = false;
     bool plan = false;
     bool turn_state = false;
+    bool arrive_state = false;
     bool debug_en;
     int prune_index = 0;
     int follow_index = 0;
     int forsee_index = 0;
     int short_forsee_index = 0;
+
     int  narrow_threshold;
     double max_speed;
     double set_yaw_speed = 0;
@@ -96,7 +105,8 @@ private:
     int opt_freq;
     double goal_dist_tolerance;
     double prune_ahead_dist;
-
+    double min_recover_radius;
+    double max_recover_radius;
     double yaw;
     std::vector<ObstacleResult> obstacle_result;
     std::string global_frame;

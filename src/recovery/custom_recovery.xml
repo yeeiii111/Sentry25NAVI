@@ -1,0 +1,17 @@
+ <!-- 注意修改lib的路径及名称 -->
+ <library path="lib/libgoal_reset_lib">  
+  <!-- name是命名空间名/类名，move_base_param.yaml全局规划名称一致，type是命名空间名::类名 -->
+  <class name="recovery/Goal_Reset" 
+        type="recovery::Goal_Reset" 
+        base_class_type="nav_core::RecoveryBehavior">
+    <description>This is a custom recover behaviour deal with goals in obstacles.</description>
+  </class>
+ </library>
+ <library path="lib/libfindfreespace">  
+  <!-- name是命名空间名/类名，move_base_param.yaml全局规划名称一致，type是命名空间名::类名 -->
+  <class name="recovery/FindFreespace" 
+        type="recovery::FindFreespace" 
+        base_class_type="nav_core::RecoveryBehavior">
+    <description>This is a custom recover behaviour deal with robot stuck in obstacles.</description>
+  </class>
+ </library>

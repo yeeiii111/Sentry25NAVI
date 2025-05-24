@@ -1,0 +1,20 @@
+move_base:
+  recovery_behavior_enabled: true  #是否启动恢复机制
+  planner_patience: 1.0
+recovery_behaviors:  # 自恢复行为
+  - name: 'FindFreespace'  
+    type: 'recovery/FindFreespace' 
+  - name: 'clear_reset'  
+    type: 'clear_costmap_recovery/ClearCostmapRecovery'  
+  - name: 'goal_reset'  
+    type: 'recovery/Goal_Reset'  
+clear_reset:  
+  reset_distance: 0.2
+  layer_names: [obstacle_layer]  
+goal_reset:
+  max_search_radius: 0.3
+  min_search_radius: 0.1
+FindFreespace:
+  max_search_radius: 0.2
+  min_search_radius: 0.1
+
