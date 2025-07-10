@@ -1,6 +1,6 @@
-image: 505.pgm
+image: RMUC_R.pgm
 resolution: 0.030000
-origin: [-6.060000, -6.810000, 0]
+origin: [-11.280000, -15.660000, 0]
 negate: 0
 occupied_thresh: 0.65
 free_thresh: 0.196

@@ -11,7 +11,7 @@
 serial::Serial gimbal_serial;
 int32_t integer_goal;
 bool pub;
-gimbal_serial_msg::serial_receive_msg received_msg;
+gimbal_serial_msg::serial_receive_msg received_msg,last_msg;
 gimbal_serial_msg::serial_send_msg send_msg;
 geometry_msgs::PoseStamped goal;
 geometry_msgs::Twist cmd_vel;
@@ -27,11 +27,11 @@ void cmd_velCallback(geometry_msgs::TwistConstPtr msg)
     if(isnan(msg->linear.y)) send_msg.v_y = 0;
     if(isnan(msg->angular.z)) send_msg.w_z = 0;
     if(isnan(msg->linear.z)) send_msg.v_z = 0;
-    if(DEBUG_EN){
     std::cout<< "v_x:"<<send_msg.v_x <<std::endl;
     std::cout<< "v_y:"<<send_msg.v_y<<std::endl;
+    std::cout<< "v_z:"<<send_msg.v_z <<std::endl;
     std::cout<< "w_z:"<<send_msg.w_z <<std::endl;
-}
+
 }
 void GoalCallback(std_msgs::Int32ConstPtr msg){
     integer_goal = msg->data;
@@ -45,7 +45,7 @@ int main(int argc, char  *argv[])
     setlocale(LC_ALL, "");
     ros::init(argc, argv,"gimbal_serial");
     ros::NodeHandle nh;
-    ros::Rate loop_rate(50);
+    ros::Rate loop_rate(500);
     gimbal_serial.setPort("/dev/ttyACM0");
     gimbal_serial.setBaudrate(115200);
     serial::Timeout to = serial::Timeout::simpleTimeout(1000);
@@ -71,7 +71,7 @@ int main(int argc, char  *argv[])
         return -1;
     }
     ros::Subscriber vel_sub = nh.subscribe("/cmd_vel", 10, cmd_velCallback);
-    ros::Subscriber escape_vel_sub = nh.subscribe("/escape_vel", 10, cmd_velCallback);
+    //ros::Subscriber escape_vel_sub = nh.subscribe("/escape_vel", 10, cmd_velCallback);
     ros::Subscriber goal_sub = nh.subscribe("/integer_topic", 10, GoalCallback);
     ros::Publisher goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal",1);
     ros::Publisher goal_backup_pub = nh.advertise<geometry_msgs::PoseStamped>("/goal_backup",1);
@@ -93,105 +93,280 @@ int main(int argc, char  *argv[])
             for(int i=0;i<sizeof(gimbal_serial_msg::serial_receive_msg);i++){
                 ordered_buffer[i] = rx_buffer[(header_pos+i)%sizeof(gimbal_serial_msg::serial_receive_msg)];
             }
+            last_msg = received_msg;
             memcpy(&received_msg,ordered_buffer,sizeof(gimbal_serial_msg::serial_receive_msg));
+            std::cout << "goal "<< static_cast<int>(received_msg.goal) << std::endl;
+            
+            if(last_msg.goal != received_msg.goal) pub = true;
         }
         if((!DEBUG_EN))
-        {   //home
+        {   
+            //RED
+            // //home
             if(received_msg.goal == 0)
             {
                 goal.pose.position.z = 0.0;
-                goal.pose.position.y = 0.0966;
-                goal.pose.position.x = -0.042;
+                goal.pose.position.y = 0;
+                goal.pose.position.x = 0.042;
                 goal.pose.orientation.z = 0.40139;
                 goal.pose.orientation.y = 0;
                 goal.pose.orientation.x = 0;
                 goal.pose.orientation.w = 0.91591;
             }
+            //supply
             if(received_msg.goal == 1 )   
             {
                 goal.pose.position.z = 0.0;
-                goal.pose.position.y = -0.41;
-                goal.pose.position.x = 3.29;
+                goal.pose.position.y = -1.234;
+                goal.pose.position.x = 3.893;
                 goal.pose.orientation.z = 0.850299;
                 goal.pose.orientation.y = 0;
                 goal.pose.orientation.x = 0;
                 goal.pose.orientation.w = 0.526210;
             }
 
-            //center
-            if(received_msg.goal == 2 )   
+            //point1
+            if(received_msg.goal == 11 )   
             {
                 goal.pose.position.z = 0.0;
-                goal.pose.position.y = 1.37;
-                goal.pose.position.x = 3.09;
+                goal.pose.position.y = 8.01;
+                goal.pose.position.x = -2.044;
                 goal.pose.orientation.z = 0.8038;
                 goal.pose.orientation.y = 0;
                 goal.pose.orientation.x = 0;
                 goal.pose.orientation.w = 0.5948;
             }
 
-            //enemy side
-            if(received_msg.goal == 3 )   
+            //point2
+            if(received_msg.goal == 12 )   
             {
                 goal.pose.position.z = 0.0;
-                goal.pose.position.y = 3.40679;
-                goal.pose.position.x = 6.38536;
+                goal.pose.position.y = 10.068;
+                goal.pose.position.x = -4.526;
                 goal.pose.orientation.z = 0.48288;
                 goal.pose.orientation.y = 0;
                 goal.pose.orientation.x = 0;
                 goal.pose.orientation.w = 0.87568;
             }
-
-            if(received_msg.goal == 4 )   
+            //point3
+            if(received_msg.goal == 13 )   
             {
                 goal.pose.position.z = 0.0;
-                goal.pose.position.y = 8.91914;
-                goal.pose.position.x = 1.29128;
+                goal.pose.position.y = 13.54;
+                goal.pose.position.x = -7.882;
                 goal.pose.orientation.z = 0.42921;
                 goal.pose.orientation.y = 0;
                 goal.pose.orientation.x = 0;
                 goal.pose.orientation.w = 0.90321;
-            }          
+            }      
+            //point4
+            if(received_msg.goal == 14 )   
+            {
+                goal.pose.position.z = 0.0;
+                goal.pose.position.y = 12.499;
+                goal.pose.position.x = -3.636;
+                goal.pose.orientation.z = 0.850299;
+                goal.pose.orientation.y = 0;
+                goal.pose.orientation.x = 0;
+                goal.pose.orientation.w = 0.526210;
+            }
+
+            //fort
+            if(received_msg.goal == 15 )   
+            {
+                goal.pose.position.z = 0.0;
+                goal.pose.position.y = 5.191;
+                goal.pose.position.x = -1.06;
+                goal.pose.orientation.z = 0.8038;
+                goal.pose.orientation.y = 0;
+                goal.pose.orientation.x = 0;
+                goal.pose.orientation.w = 0.5948;
+            }
+            //T
+            if(received_msg.goal == 16 )   
+            {
+                goal.pose.position.z = 0.0;
+                goal.pose.position.y = 6.571;
+                goal.pose.position.x = -7.645;
+                goal.pose.orientation.z = 0.8038;
+                goal.pose.orientation.y = 0;
+                goal.pose.orientation.x = 0;
+                goal.pose.orientation.w = 0.5948;
+            }    
+            if(received_msg.goal == 17 )   
+            {
+                goal.pose.position.z = 0.0;
+                goal.pose.position.y = 4.967;
+                goal.pose.position.x = -2.29;
+                goal.pose.orientation.z = 0.8038;
+                goal.pose.orientation.y = 0;
+                goal.pose.orientation.x = 0;
+                goal.pose.orientation.w = 0.5948;
+            }         
+            if(received_msg.goal == 18 )   
+            {
+                goal.pose.position.z = 0.0;
+                goal.pose.position.y = 3.533;
+                goal.pose.position.x = 1.610;
+                goal.pose.orientation.z = 0.8038;
+                goal.pose.orientation.y = 0;
+                goal.pose.orientation.x = 0;
+                goal.pose.orientation.w = 0.5948;
+            }    
+            //enemy side
+            if(received_msg.goal == 19 )   
+            {
+                goal.pose.position.z = 0.0;
+                goal.pose.position.y = 16.473;
+                goal.pose.position.x = -7.582;
+                goal.pose.orientation.z = 0.8038;
+                goal.pose.orientation.y = 0;
+                goal.pose.orientation.x = 0;
+                goal.pose.orientation.w = 0.5948;
+            }  
+            if(received_msg.goal == 20 )   
+            {
+                goal.pose.position.z = 0.0;
+                goal.pose.position.y = 15.777;
+                goal.pose.position.x = -1.745;
+                goal.pose.orientation.z = 0.8038;
+                goal.pose.orientation.y = 0;
+                goal.pose.orientation.x = 0;
+                goal.pose.orientation.w = 0.5948;
+            }  
+            //BLUE
+            // home
+            // if(received_msg.goal == 0)
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 0;
+            //     goal.pose.position.x = 0.042;
+            //     goal.pose.orientation.z = 0.40139;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.91591;
+            // }
+            // //supply
             // if(received_msg.goal == 1 )   
             // {
             //     goal.pose.position.z = 0.0;
-            //     goal.pose.position.y = 1.94381;
-            //     goal.pose.position.x = 0;
+            //     goal.pose.position.y = -2.81;
+            //     goal.pose.position.x = 3.796;
             //     goal.pose.orientation.z = 0.850299;
             //     goal.pose.orientation.y = 0;
             //     goal.pose.orientation.x = 0;
             //     goal.pose.orientation.w = 0.526210;
             // }
-            // if(received_msg.goal == 2 )   
+
+            // //point1
+            // if(received_msg.goal == 11 )   
             // {
             //     goal.pose.position.z = 0.0;
-            //     goal.pose.position.y = 1.5;
-            //     goal.pose.position.x = 1;
+            //     goal.pose.position.y = 9.47;
+            //     goal.pose.position.x = 4.246;
             //     goal.pose.orientation.z = 0.8038;
             //     goal.pose.orientation.y = 0;
             //     goal.pose.orientation.x = 0;
             //     goal.pose.orientation.w = 0.5948;
             // }
-            // if(received_msg.goal == 3 )   
+
+            // //point2
+            // if(received_msg.goal == 12 )   
             // {
             //     goal.pose.position.z = 0.0;
-            //     goal.pose.position.y = 0;
-            //     goal.pose.position.x = -1;
+            //     goal.pose.position.y = 7.82;
+            //     goal.pose.position.x = -1.52;
             //     goal.pose.orientation.z = 0.48288;
             //     goal.pose.orientation.y = 0;
             //     goal.pose.orientation.x = 0;
             //     goal.pose.orientation.w = 0.87568;
             // }
-            // if(received_msg.goal == 4 )   
+            // //point3
+            // if(received_msg.goal == 13 )   
             // {
             //     goal.pose.position.z = 0.0;
-            //     goal.pose.position.y = 2;
-            //     goal.pose.position.x = 0;
+            //     goal.pose.position.y = 7.08;
+            //     goal.pose.position.x = 1.44;
             //     goal.pose.orientation.z = 0.42921;
             //     goal.pose.orientation.y = 0;
             //     goal.pose.orientation.x = 0;
             //     goal.pose.orientation.w = 0.90321;
+            // }      
+            // //point4
+            // if(received_msg.goal == 14 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 12.54;
+            //     goal.pose.position.x = 1.527;
+            //     goal.pose.orientation.z = 0.850299;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.526210;
             // }
+
+            // //fort
+            // if(received_msg.goal == 15 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 4.8;
+            //     goal.pose.position.x = -0.07;
+            //     goal.pose.orientation.z = 0.8038;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.5948;
+            // }
+            // //T
+            // if(received_msg.goal == 16 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 7.48408;
+            //     goal.pose.position.x = -6.3537;
+            //     goal.pose.orientation.z = 0.8038;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.5948;
+            // }      
+            // if(received_msg.goal == 17 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 4.474;
+            //     goal.pose.position.x = -1.7;
+            //     goal.pose.orientation.z = 0.8038;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.5948;
+            // }        
+            // if(received_msg.goal == 18 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 3.286;
+            //     goal.pose.position.x = 2.013;
+            //     goal.pose.orientation.z = 0.8038;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.5948;
+            // }  
+            // //enemy side
+            // if(received_msg.goal == 19 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 17.566;
+            //     goal.pose.position.x = -4.535;
+            //     goal.pose.orientation.z = 0.8038;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.5948;
+            // }  
+            // if(received_msg.goal == 20 )   
+            // {
+            //     goal.pose.position.z = 0.0;
+            //     goal.pose.position.y = 15.63;
+            //     goal.pose.position.x = 1.76;
+            //     goal.pose.orientation.z = 0.8038;
+            //     goal.pose.orientation.y = 0;
+            //     goal.pose.orientation.x = 0;
+            //     goal.pose.orientation.w = 0.5948;
+            // }  
             goal.header.frame_id = "map";
             goal.header.stamp = ros::Time::now();
             if(pub == true){
@@ -199,7 +374,7 @@ int main(int argc, char  *argv[])
                 goal_backup_pub.publish(goal);
                 pub =false;
             }
-            ROS_INFO("publish goal");
+            //ROS_INFO("publish goal");
             if(DEBUG_EN){
                 std::cout<< "header:"<<static_cast<unsigned int>(received_msg.header) <<std::endl;
                 std::cout<< "team:"<<static_cast<unsigned int>(received_msg.team )<<std::endl;

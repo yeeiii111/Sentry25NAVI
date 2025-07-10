@@ -12,6 +12,7 @@ Controller::Controller()
     nh.param<double>("prune_ahead_distance", prune_ahead_dist, 0.5);
     nh.param<std::string>("global_frame", global_frame, "map");
     nh.param<bool>("debug_en", debug_en ,false);
+    nh.param<bool>("hole_mode", hole_mode , false);
     nh.param<int>("straight_foresee_index", straight_foresee_index, 1);
     nh.param<int>("curve_foresee_index", curve_foresee_index, 1);
     nh.param<int>("narrow_threshold",narrow_threshold, 5);
@@ -53,14 +54,14 @@ Controller::Controller()
 
 void Controller::Plan(const ros::TimerEvent& event){
 
-    if(plan && !prune_path.poses.empty() && !opt_path.poses.empty() ){
-        // ROS_INFO("plan_start");
-        auto start = ros::Time::now();
-        geometry_msgs::PoseStamped robot_pose;
+    geometry_msgs::PoseStamped robot_pose;
+    double EuclideanDistance;
+    if(plan)
+    {
         GetTargetRobotPose(tf_listener, global_path.header.frame_id, robot_pose);
-        double EuclideanDistance = GetEuclideanDistance(robot_pose,global_path.poses.back());
+        EuclideanDistance = GetEuclideanDistance(robot_pose,global_path.poses.back());
         if (EuclideanDistance <= goal_dist_tolerance
-            || prune_index == global_path.poses.size() - 1 || (EuclideanDistance <= goal_dist_tolerance + 0.1 && arrive_state == true)){
+            || prune_index == global_path.poses.size() - 1 || (EuclideanDistance <= goal_dist_tolerance + 0.2 && arrive_state == true)){
             // plan = false;
             geometry_msgs::Twist cmd_vel;
             cmd_vel.linear.x = 0;
@@ -68,13 +69,15 @@ void Controller::Plan(const ros::TimerEvent& event){
             cmd_vel.linear.z = 1;
             cmd_vel.angular.z = set_yaw_speed;
             cmd_vel_pub.publish(cmd_vel);
-            std::cout << cmd_vel.linear.z << std::endl;
+            //std::cout << cmd_vel.linear.z ;
             ROS_INFO("Planning Success!");
             prune_index = 0;
             follow_index = 0;
             arrive_state = true;
             return;
         }
+    }
+    if(plan && !prune_path.poses.empty() && !opt_path.poses.empty()&&global_planner_status != 4 ){
         arrive_state = false;
         auto time = std::chrono::high_resolution_clock::now();
         if(!localized ||  (time - localized_time < std::chrono::milliseconds(5000))) 
@@ -90,26 +93,40 @@ void Controller::Plan(const ros::TimerEvent& event){
         }
         //原GenTraj函数有时会在local path中加入Nan点，导致后续错误，删除这些点有时会导致路经平滑失败，即localpath为空
         //平滑得到的轨迹会过障碍，移除这个功能
-        //std::lock_guard<std::mutex> lock(prunepath_mutex);
-        std::lock_guard<std::mutex> lock(optpath_mutex);
-        FindNearstPose(robot_pose, opt_path, follow_index, prune_ahead_dist);
-
-        int i = follow_index;
         nav_msgs::Path prune_opt_path;
-        while(i < opt_path.poses.size()){
-            prune_opt_path.poses.push_back(opt_path.poses[i]);
-            i++;
-            // std::cout << i << std::endl;
+        {
+            std::lock_guard<std::mutex> lock(optpath_mutex);
+            FindNearstPose(robot_pose, opt_path, follow_index, prune_ahead_dist);
+
+            int i = follow_index;
+
+            while(i < opt_path.poses.size()){
+                prune_opt_path.poses.push_back(opt_path.poses[i]);
+                i++;
+            }
+
+            // std::lock_guard<std::mutex> lock(prunepath_mutex);
+            // FindNearstPose(robot_pose, prune_path, follow_index, prune_ahead_dist);
+
+            // int i = follow_index;
+
+            // while(i < prune_path.poses.size()){
+            //     prune_opt_path.poses.push_back(prune_path.poses[i]);
+            //     i++;
+            // }
         }
         curvature = CurvatureCal(prune_opt_path);
-        std::cout << "curvature = " << curvature << std::endl;
+        // std::cout << "curvature = " << curvature << std::endl;
 
         //朝向与前进方向相差过大时要先调整雷达方向
         int index = std::min(static_cast<int>(prune_opt_path.poses.size()) - 1, 10);
-        if(((abs(YawErrorCal(robot_pose,prune_opt_path.poses[index])) > M_PI/2) || ((abs(YawErrorCal(robot_pose,prune_opt_path.poses[index])) > M_PI/3) && narrow) || turn_state) 
+        if (narrow && hole_mode) x_forward = false;
+        else x_forward = true;
+
+        double error = YawErrorCal(robot_pose,prune_opt_path.poses[index],x_forward);
+        if(((abs(error) > M_PI/2) || ((abs(error) > M_PI/3) && narrow) || turn_state) 
             && EuclideanDistance > 1.0)
         {
-            double error = YawErrorCal(robot_pose,prune_opt_path.poses[index]);
             if(abs(error) < M_PI/6 && (!narrow)){
                 turn_state = false;
                 return;
@@ -146,7 +163,23 @@ void Controller::Plan(const ros::TimerEvent& event){
         }
         cmd_vel_pub.publish(cmd_vel);
     }   
-    else{
+    else if(localized &&( std::chrono::high_resolution_clock::now() - localized_time >  std::chrono::milliseconds(5000))){
+        geometry_msgs::Twist cmd_vel;
+            cmd_vel.linear.x = 0;
+            cmd_vel.linear.y = 0;
+            cmd_vel.angular.z = 0;
+            cmd_vel.linear.z = 1;   // bool success or not
+            ROS_INFO("////////////////NO PATH/////////////////////");
+            cmd_vel_pub.publish(cmd_vel);
+            if(debug_en){
+                // geometry_msgs::PoseStamped robot_pose;
+                // GetTargetRobotPose(tf_listener, "map", robot_pose);
+                // double tem = anglelimit(tf2::getYaw(robot_pose.pose.orientation)+M_PI_2);
+                // std::cout << "attitude:"<<tem<<std::endl;
+                // std::cout << "yaw:" <<tf2::getYaw(robot_pose.pose.orientation)<<std::endl;
+            }
+    }
+    else {
         geometry_msgs::Twist cmd_vel;
             cmd_vel.linear.x = 0;
             cmd_vel.linear.y = 0;
@@ -159,7 +192,7 @@ void Controller::Plan(const ros::TimerEvent& event){
                 // double tem = anglelimit(tf2::getYaw(robot_pose.pose.orientation)+M_PI_2);
                 // std::cout << "attitude:"<<tem<<std::endl;
                 // std::cout << "yaw:" <<tf2::getYaw(robot_pose.pose.orientation)<<std::endl;
-            }
+            }     
     }
     
 }
@@ -184,7 +217,7 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
                     tem_prune_path.push_back(global_path.poses[j]);
                     j++;
                 }
-            else break;
+            else continue;
         }
         {
             std::lock_guard<std::mutex> lock(prunepath_mutex);
@@ -211,16 +244,17 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
             double ratio;
             double x = static_cast<double>(size/2 - abs(size/2 - (count + prune_index)));
             ratio = 1 - exp(-x * 0.08);
-            // std::cout << "ratio:" <<ratio << std::endl;
-            if(optimizer_.optimize(obstacle_result, pose, pose_opt, ratio))
-                {tem_opt_path.push_back(pose_opt);
-                //std::cout << hypot(pose_opt.pose.position.x - pose.pose.position.x, pose_opt.pose.position.y - pose.pose.position.y);
+            if(optimizer_.optimize(obstacle_result, pose, pose_opt, ratio) && 
+            ( (!narrow && hole_mode) || !hole_mode ))
+            // 狭窄环境下不优化路径，容易出现锯齿
+                {
+                    tem_opt_path.push_back(pose_opt);
                 }
             else 
-            {
-                tem_opt_path.push_back(pose);
-                //std::cout << "optimize failed!!!" ;
-            }
+                {
+                    tem_opt_path.push_back(pose);
+                    //std::cout << "optimize failed!!!" ;
+                }
             count ++;
         }
         //std::cout << "before_local_path_size = " << opt_path.poses.size() << std::endl;
@@ -248,22 +282,28 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
     }
     else 
     {
-        opt_path.poses.clear();
-        prune_path.poses.clear();
-        local_path_pub.publish(opt_path);
+        // opt_path.poses.clear();
+        // prune_path.poses.clear();
+        // local_path_pub.publish(opt_path);
     }
 
 
 }
+// x_forward决定前进方向是否是x正方向
 double Controller::YawErrorCal(const geometry_msgs::PoseStamped& robot_pose,
-                                const geometry_msgs::PoseStamped& path_pose){
+                                const geometry_msgs::PoseStamped& path_pose,
+                                bool x_forward){
     double robot_attitude = anglelimit(tf2::getYaw(robot_pose.pose.orientation));
     if(debug_en){
         // std::cout << "robot_attitude:"<<robot_attitude<<std::endl;
     }
     double dx = path_pose.pose.position.x - robot_pose.pose.position.x;
     double dy = path_pose.pose.position.y - robot_pose.pose.position.y;
-    double path_attitude = atan2(dy, dx);
+    double path_attitude;
+    if(x_forward)
+        path_attitude = atan2(dy, dx);
+    else 
+        path_attitude = atan2(dy, dx) - M_PI_2;
     if(std::isnan(path_attitude))
     {
         ROS_ERROR("path_attitude NAN");
@@ -479,9 +519,10 @@ double Controller::CurvatureCal(const nav_msgs::Path& traj){
     return curvature;
 }
 double Controller::YawControl(const geometry_msgs::PoseStamped& robot_pose,
-                            const geometry_msgs::PoseStamped& path_pose)
+                            const geometry_msgs::PoseStamped& path_pose,
+                            bool x_forward)
 {
-    double error = YawErrorCal(robot_pose,path_pose);
+    double error = YawErrorCal(robot_pose,path_pose,x_forward);
     double wz = wz_p_value * error + wz_d_value*(error - last_yaw_error);
     last_yaw_error = error;
     return wz;
@@ -539,15 +580,15 @@ void Controller::FollowTraj(const geometry_msgs::PoseStamped& robot_pose,
 
 
         // double error = YawErrorCal(robot_pose,traj.poses[index]);
-        // double wz = wz_p_value * error + wz_d_value*(error - last_yaw_error);
+        // double wz = wz_p_value * error + wz_d_val1ue*(error - last_yaw_error);
         // last_yaw_error = error;
         double wz = 0;
         if(!narrow)
-            wz = YawControl(robot_pose,traj.poses[10]);
+            wz = YawControl(robot_pose,traj.poses[10],x_forward);
         cmd_vel.angular.z = wz;
         //对旋转的补偿，匀速旋转是，实际走过的是一段圆弧
         double yaw_calibrated = anglelimit(yaw - wz / (plan_freq *2)) ;
-        // std::cout<<"yaw_error  "<<error<<"   wz   "<< wz <<std::endl;
+        // std::cout<<"yaw_error  "<<error<<"   wz   "<< wz <<std: :endl;
         // std::cout<<"yaw_clibrated" << yaw_calibrated <<std::endl;
         cmd_vel.linear.x = vx_global * cos(yaw_calibrated) + vy_global * sin(yaw_calibrated);
         cmd_vel.linear.y = - vx_global * sin(yaw_calibrated) + vy_global * cos(yaw_calibrated);

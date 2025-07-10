@@ -114,6 +114,7 @@ private:
     std::mutex                                  scan_mutex;
     std::mutex                                  obs_mutex;
     std::queue<pcl::PointCloud<pcl::PointXYZ>>  obs_queue;
+    std::queue<pcl::PointCloud<pcl::PointXYZ>>  scan_queue;
     pcl::PointCloud<pcl::Normal>::Ptr           point_normal;
     pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> est_normal;
     pcl::FPFHEstimationOMP<pcl::PointXYZ, pcl::Normal, pcl::FPFHSignature33> est_fpfh;

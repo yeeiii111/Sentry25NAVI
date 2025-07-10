@@ -8,7 +8,6 @@ Obstacle_detector::Obstacle_detector():
     prior_map (new pcl::PointCloud<pcl::PointXYZ>),
     hole (new pcl::PointCloud<pcl::PointXYZ>),
     filtered_prior_map (new pcl::PointCloud<pcl::PointXYZ>),
-    filtered_hole(new pcl::PointCloud<pcl::PointXYZ>),
     obstacle (new pcl::PointCloud<pcl::PointXYZ>),
     obs (new pcl::PointCloud<pcl::PointXYZ>),
     scan_sensor (new pcl::PointCloud<pcl::PointXYZ>),
@@ -27,10 +26,6 @@ Obstacle_detector::Obstacle_detector():
     nh.param<std::string>("map_path", map_path, "");
     nh.param<std::string>("hole_path", hole_path, "");
     nh.param<int>("freq", freq, 10);
-    nh.param<std::vector<double>>("extrinsic_T", extrinT, std::vector<double>());
-    nh.param<std::vector<double>>("extrinsic_R", extrinR, std::vector<double>());
-    nh.param<std::vector<double>>("IMU_extrinsic_T", IMU_extrinT, std::vector<double>());
-    nh.param<std::vector<double>>("IMU_extrinsic_R", IMU_extrinR, std::vector<double>());
     nh.param<double>("leaf_size", leaf_size, 0.05);
     nh.param<float>("box_size", box_size, 1.5);
     nh.param<bool>("prior_map_pub_en", prior_map_pub_en, 0);
@@ -42,7 +37,6 @@ Obstacle_detector::Obstacle_detector():
     nh.param<double>("lidar_y",lidar_y,0.11);
     nh.param<bool>("debug_en",debug_en,0);
     nh.param<bool>("align_en",align_en,0);
-    nh.param<bool>("use_stl_cloud", use_stl_cloud, false);
     nh.param<double>("max_dist_sq",max_dist_sq,1);
     nh.param<double>("max_iterations",max_iterations,100);
     register_->reduction.num_threads = 4;
@@ -78,23 +72,18 @@ Obstacle_detector::Obstacle_detector():
     //     ros::shutdown();
     // }
     //如果用扫描得到的点云当作目标，要先把点云转换到地图坐标系，而不是建图时pointlio的起点坐标系
-    if(use_stl_cloud == false){
-        Eigen::Affine3d   T_map_vice_map;
-        T_map_vice_map = Eigen::Isometry3d::Identity();
-        Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitY());
-        T_map_vice_map.linear() = roll.toRotationMatrix();
-        T_map_vice_map.translation().z() = lidar_height;
-        T_map_vice_map.translation().x() = lidar_y;
-        pcl::transformPointCloud(*prior_map, *prior_map, T_map_vice_map);
-        // pcl::transformPointCloud(*hole, *hole, T_map_vice_map);
+    Eigen::Affine3d   T_map_vice_map;
+    T_map_vice_map = Eigen::Isometry3d::Identity();
+    Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitY());
+    T_map_vice_map.linear() = roll.toRotationMatrix();
+    T_map_vice_map.translation().z() = lidar_height;
+    T_map_vice_map.translation().x() = lidar_y;
+    pcl::transformPointCloud(*prior_map, *prior_map, T_map_vice_map);
 
-    }
     pcl::VoxelGrid<pcl::PointXYZ> downsample;
     downsample.setInputCloud(prior_map);
     downsample.setLeafSize(leaf_size,leaf_size,leaf_size);
     downsample.filter(*filtered_prior_map);
-    // downsample.setInputCloud(hole);
-    // downsample.filter(*filtered_hole);
     kdtree.setInputCloud(filtered_prior_map);
     box_center.x() = 0; 
     box_center.y() = 0;
@@ -211,9 +200,9 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
     Eigen::Isometry3d T_map_target ;
     T_map_target.linear() = orientation.toRotationMatrix();
     T_map_target.translation() = position;
-    //-------------------------------livox_cloud or standard cloud-------------------------------//
+
     Eigen::Affine3d T_map_sensor;
-    T_map_sensor = T_map_target;
+    T_map_sensor = T_map_target;//这里主要是换成了affine
     pcl::PointCloud<pcl::PointXYZ>::Ptr scan_local (new pcl::PointCloud<pcl::PointXYZ>());
     pcl::PointCloud<pcl::PointXYZ>::Ptr obs_map (new pcl::PointCloud<pcl::PointXYZ>());
     {
@@ -265,7 +254,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
             std::cout << "transform & downsample & registration took " << duration_mid.count() << " milliseconds" << std::endl;
 
             // if(result.error < 10)
-                detect(cropped_obs);
+                detect(cropped_scan);
             if(align_en)
             {
                 sensor_msgs::PointCloud2 aligned_ros;
@@ -276,11 +265,11 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
             }
 
             sensor_msgs::PointCloud2 obstacle_ros;
+            pcl::transformPointCloud(*obstacle, *obstacle, T_map_sensor.inverse());//转换回body坐标系
             pcl::toROSMsg(*obstacle,obstacle_ros);
-            obstacle_ros.header.frame_id = "map";
+            obstacle_ros.header.frame_id = "body";
             obstacle_ros.header.stamp = ros::Time::now();
             obstacle_pub.publish(obstacle_ros);
-
 
             diverge_pub.publish(diverge);
             match_pub.publish(match);
@@ -288,7 +277,7 @@ void Obstacle_detector::timer(const ros::TimerEvent &event){
             if(high_match)
             {
                 body_frame_pub.publish(body_pose);
-                std::cout << body_pose << std::endl;
+                // std::cout << body_pose << std::endl;
             }
 
         }

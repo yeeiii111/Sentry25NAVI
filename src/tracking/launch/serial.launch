@@ -1,4 +1,4 @@
 <launch>
-    <node pkg="tracking" type="serial" name="serial" output="screen" respawn="true">
+    <node pkg="tracking" type="serial" name="serial" output="screen" respawn="true" respawn_delay="10">
     </node>
 </launch>

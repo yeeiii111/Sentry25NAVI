@@ -101,4 +101,8 @@ catkin_install_python(PROGRAMS
   src/launch_controller.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
+catkin_install_python(PROGRAMS
+  src/backup.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 

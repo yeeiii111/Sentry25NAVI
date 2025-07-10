@@ -54,7 +54,6 @@ private:
     int                                             min_diverge_num;
     int                                             freq;
     bool                                            high_match;
-    bool                                            use_stl_cloud;
     bool                                            prior_map_pub_en;
     bool                                            use_livox_cloud;
     bool                                            debug_en;
@@ -73,7 +72,6 @@ private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr             prior_map;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             hole;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             filtered_prior_map;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr             filtered_hole;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             obstacle;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             obs;
     pcl::PointCloud<pcl::PointXYZ>::Ptr             scan_sensor;
@@ -100,14 +98,8 @@ private:
     ros::Subscriber                                 obs_sub;
     nav_msgs::OccupancyGrid                         costmap;
     std::chrono::time_point<std::chrono::high_resolution_clock>     match_time;
-    std::vector<double>                             extrinT;
-    std::vector<double>                             extrinR;
-    std::vector<double>                             IMU_extrinT;
-    std::vector<double>                             IMU_extrinR;
     Eigen::Isometry3d                               T_baselink_sensor;//sensor中的坐标左乘这个得到在baselink坐标系中的坐标
                                                                       //Pb = T_b_a * Pa
-    Eigen::Isometry3d                               T_baselink_IMU;
-    Eigen::Isometry3d                               T_map_odom;
     std::mutex                                      scan_mutex;
     std::mutex                                      obs_mutex;
 };

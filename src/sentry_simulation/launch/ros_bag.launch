@@ -7,10 +7,13 @@
                 /path
                 /move_base/global_costmap/costmap
                 /move_base/TrajectoryPlannerROS/global_plan
-                /detector/obstacle
-                /cloud_registered
                 /controller/local_path
                 /cmd_vel
+                /move_base_simple/goal
+                /escape_vel
+                /move_base/status
                 /map
-                /relocalization/aligned"/>
+                /localize_success
+                /relocalization/aligned
+                  /relocalization/target"/>
 </launch>

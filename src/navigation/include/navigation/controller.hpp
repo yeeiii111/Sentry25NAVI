@@ -47,10 +47,11 @@ public:
     void Plan(const ros::TimerEvent& event);
     void PathOptimaze(const ros::TimerEvent& event);
     double YawErrorCal(const geometry_msgs::PoseStamped& robot_pose,
-                      const geometry_msgs::PoseStamped& path_pose);
+                      const geometry_msgs::PoseStamped& path_pose,
+                      bool x_forward);
     double CurvatureCal(const nav_msgs::Path& traj);
     double YawControl(const geometry_msgs::PoseStamped& robot_pose,
-                      const geometry_msgs::PoseStamped& path_pose);
+                      const geometry_msgs::PoseStamped& path_pose, bool x_forward);
     double YawControl(double error);
 private:
     ros::Publisher cmd_vel_pub;
@@ -83,6 +84,8 @@ private:
     bool turn_state = false;
     bool arrive_state = false;
     bool debug_en;
+    bool hole_mode = false;
+    bool x_forward = true;
     int prune_index = 0;
     int follow_index = 0;
     int forsee_index = 0;

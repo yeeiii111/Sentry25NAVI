@@ -1,6 +1,6 @@
-image: 505.pgm
+image: wandou.pgm
 resolution: 0.030000
-origin: [-6.060000, -6.810000, 0]
+origin: [-5.430000, -1.500000, 0]
 negate: 0
 occupied_thresh: 0.65
 free_thresh: 0.196

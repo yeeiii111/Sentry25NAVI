@@ -26,6 +26,7 @@ void livox2rosmsg(const livox_ros_driver2::CustomMsg::ConstPtr &msg)
     }
     sensor_msgs::PointCloud2 ros_cloud;
     pcl::toROSMsg(pl_surf, ros_cloud);
+    ros_cloud.header.frame_id = " livox_ros_frame";
     ros_cloud.header = msg->header;
     rosmsg_pub.publish(ros_cloud);
 }

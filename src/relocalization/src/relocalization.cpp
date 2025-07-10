@@ -44,8 +44,9 @@ Relocalization::Relocalization():
     nh.param<bool>("use_stl_cloud", use_stl_cloud, false);
     nh.param<double>("diverge_threshold", diverge_threshold, 10.0f);
     nh.param<double>("precise_diverge_threshold", precise_diverge_threshold, 5.0f);
-    nh.param<double>("lidar_height",lidar_height,0.145);
-    nh.param<double>("lidar_pitch",lidar_roll,-0.349);
+    nh.param<double>("lidar_height",lidar_height,0.32);
+    nh.param<double>("lidar_pitch",lidar_roll,0.349);
+
     // diverge.data = 0;
     register_->reduction.num_threads = num_threads;
     register_->rejector.max_dist_sq = max_dist_sq;
@@ -88,7 +89,7 @@ Relocalization::Relocalization():
     filtered_prior_obs = small_gicp::voxelgrid_sampling_omp(*prior_obs ,map_leaf_size, 8);
     // if(use_stl_cloud == false){
     //     T_map_vice_map = Eigen::Isometry3d::Identity();
-    //     Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitX());
+    //     Eigen::AngleAxis roll(lidar_roll,Eigen::Vector3d::UnitY());
     //     T_map_vice_map.linear() = roll.toRotationMatrix();
     //     T_map_vice_map.translation().z() = lidar_height;
     //     pcl::transformPointCloud(*filtered_prior_map, *filtered_prior_map, T_map_vice_map);
@@ -97,11 +98,11 @@ Relocalization::Relocalization():
     // pcl::PassThrough<pcl::PointXYZ> passTh;
     // passTh.setInputCloud(filtered_prior_map);                                                    // 输入原始点云
     // passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
-    // passTh.setFilterLimits(0, 3);                                               // 阈值范围
+    // passTh.setFilterLimits(-1, 3);                                               // 阈值范围
     // passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
-    // passTh.filter(*high_features_map); 
+    // passTh.filter(*filtered_prior_map); 
     // if(use_stl_cloud == false){
-    //     pcl::transformPointCloud(*high_features_map, *high_features_map, T_map_vice_map.inverse());
+    //     //pcl::transformPointCloud(*high_features_map, *high_features_map, T_map_vice_map.inverse());
     //     pcl::transformPointCloud(*filtered_prior_map, *filtered_prior_map, T_map_vice_map.inverse());
     // }
 
@@ -118,7 +119,8 @@ void Relocalization::timer(const ros::TimerEvent& event)
 {
     T_vice_map_odom.header.frame_id = "vice_map";
     T_vice_map_odom.child_frame_id = "odom";
-    if(!obs_queue.empty() && !scan->empty())
+    if(!obs_queue.empty() && !scan_queue.empty())
+    // if( !scan_queue.empty())
     {
         if(localize_success == false || diverge.data == true )
         {
@@ -133,6 +135,12 @@ void Relocalization::timer(const ros::TimerEvent& event)
             }
             {
                 std::lock_guard<std::mutex> lock(scan_mutex);
+                scan->clear();
+                while(!scan_queue.empty())
+                {
+                    *scan += scan_queue.front();
+                    scan_queue.pop();
+                }
                 Eigen::Affine3d tem(T_odom_lidar);
                 pcl::transformPointCloud(*scan,*scan_odom,tem);
             }
@@ -150,6 +158,11 @@ void Relocalization::timer(const ros::TimerEvent& event)
             T_vice_map_odom.transform.translation.x = translation.x();
             T_vice_map_odom.transform.translation.y = translation.y();
             T_vice_map_odom.transform.translation.z = translation.z(); 
+            std::cout<< "qx = " << q.x() << std::endl;
+            std::cout<< "qy = " << q.y() << std::endl;
+            std::cout<< "qz = " << q.z() << std::endl;
+            std::cout<< "qw = " << q.w() << std::endl;
+
             std::cout<<"x = "<< translation.x() << std::endl;
             std::cout<<"y = "<< translation.y() << std::endl;
             std::cout<<"z = "<< translation.z() << std::endl;
@@ -199,12 +212,12 @@ void Relocalization::timer(const ros::TimerEvent& event)
     if(debug_en)
     {
         sensor_msgs::PointCloud2 msg_1;
-        pcl::toROSMsg(*filtered_prior_obs, msg_1);
+        pcl::toROSMsg(*filtered_prior_map, msg_1);
         msg_1.header.frame_id = "vice_map";  
         target_pub.publish(msg_1); 
 
         sensor_msgs::PointCloud2 msg_2;
-        pcl::toROSMsg(*obs, msg_2);
+        pcl::toROSMsg(*scan_odom, msg_2);
         msg_2.header.frame_id = "vice_map";  
         source_pub.publish(msg_2); 
 
@@ -239,13 +252,14 @@ void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &sou
     // pcl::PassThrough<pcl::PointXYZ> passTh;
     // passTh.setInputCloud(filtered_scan_odom);                                                    // 输入原始点云
     // passTh.setFilterFieldName("z");                                                 // 直通滤波将过滤的维度，可以是pcl::PointXYZRGB中任意维度
-    // passTh.setFilterLimits(0, 3);                                               // 阈值范围
+    // passTh.setFilterLimits(-1, 3);                                               // 阈值范围
     // passTh.setNegative(false);                                                       // true不保留范围内的点，false保留范围内的点
-    // passTh.filter(*high_features_scan); 
-
+    // passTh.filter(*filtered_scan_odom); 
+    // passTh.setInputCloud(filtered_scan_odom);                                                    // 输入原始点云
+    // passTh.filter(*filtered_scan_odom);
     // if(use_stl_cloud == false){
     //     pcl::transformPointCloud(*filtered_scan_odom, *filtered_scan_odom, T_map_vice_map.inverse());
-    //     pcl::transformPointCloud(*high_features_scan, *high_features_scan, T_map_vice_map.inverse());
+    //     //pcl::transformPointCloud(*high_features_scan, *high_features_scan, T_map_vice_map.inverse());
     // }  
 
     small_gicp::estimate_covariances_omp(*source_cov, num_neighbors, num_threads);
@@ -284,26 +298,27 @@ void Relocalization::registration(const pcl::PointCloud<pcl::PointXYZ>::Ptr &sou
         localize_success = false;
         if(result.error >= previous_error || (previous_error - result.error < 1))//无法收敛时换一个先验位姿
         {
-            // previous_error = 100000.0f;
-            // // Eigen::Isometry3d T_rotation = Eigen::Isometry3d::Identity();
-            // double yaw_bias;
-            // if(yaw_bias_cnt % 2 == 0) yaw_bias = (yaw_bias_cnt/2 + 1) * 0.3491f;//每次旋转20度
-            // else yaw_bias = -(yaw_bias_cnt/2 + 1) * 0.3491f;
-            // std::cout << "-------------------yaw_bias:-------------------" << yaw_bias <<std::endl;
-            // double angle_x = 20.0 * M_PI / 180.0;  // 转换为弧度
-            // Eigen::AngleAxisd rotate_x(angle_x, Eigen::Vector3d::UnitX());
-            // Eigen::Vector3d new_axis = rotate_x * Eigen::Vector3d::UnitZ();
-            // Eigen::AngleAxis yaw(yaw_bias,new_axis);
-            // T_relocalize.rotate(yaw.toRotationMatrix());
-            // previous_icp_result = T_relocalize;
-            // yaw_bias_cnt ++; 
-            lost = true;
+            previous_error = 100000.0f;
+            // Eigen::Isometry3d T_rotation = Eigen::Isometry3d::Identity();
+            double yaw_bias;
+            if(yaw_bias_cnt % 2 == 0) yaw_bias = (yaw_bias_cnt/2 + 1) * 0.349f;//每次旋转20度
+            else yaw_bias = -(yaw_bias_cnt/2 + 1) * 0.349f;
+            std::cout << "-------------------yaw_bias:-------------------" << yaw_bias <<std::endl;
+            double angle_x = -20.0 * M_PI / 180.0;  // 转换为弧度
+            Eigen::AngleAxisd rotate_x(angle_x, Eigen::Vector3d::UnitY());
+            Eigen::Vector3d new_axis = rotate_x * Eigen::Vector3d::UnitZ();
+            Eigen::AngleAxis yaw(yaw_bias,new_axis);
+            T_relocalize.rotate(yaw.toRotationMatrix());
+            previous_icp_result = T_relocalize;
+            yaw_bias_cnt ++; 
+            // lost 一直为false就不会进入粗配准
+            // lost = true;
         }
         else previous_error = result.error;
     }
     if(debug_en){
         Eigen::Affine3d tem(T_map_scan);
-        pcl::transformPointCloud(*filtered_obs,*aligned,tem);   
+        pcl::transformPointCloud(*filtered_scan_odom,*aligned,tem);   
     }
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> duration = end_time - start_time;
@@ -359,12 +374,18 @@ void Relocalization::Obs_Callback(const sensor_msgs::PointCloud2ConstPtr &msg)
 void Relocalization::Standard_Scan_Callback(const sensor_msgs::PointCloud2ConstPtr &msg)
 { 
     pcl::PointCloud<pcl::PointXYZ> tem;
-    std::lock_guard<std::mutex> lock(scan_mutex);
-    scan->clear();
-    int size = msg->height* msg->width;
-    scan->resize(size);
+    // std::lock_guard<std::mutex> lock(scan_mutex);
+    // scan->clear();
+    // int size = msg->height* msg->width;
+    // scan->resize(size);
     pcl::fromROSMsg(*msg, tem); 
-    *scan = tem;     
+    {
+        std::lock_guard<std::mutex> lock(scan_mutex);
+        scan_queue.push(tem);
+        if(scan_queue.size() > max_frame)
+            scan_queue.pop();
+    }
+   // *scan = tem;     
 }
 void Relocalization::Diverge_Callback(const std_msgs::Bool::ConstPtr &msg)
 {

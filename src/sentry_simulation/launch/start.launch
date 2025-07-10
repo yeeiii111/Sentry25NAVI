@@ -1,3 +1,4 @@
 <launch>
+    <param name="/roslaunch/auto_clean_params" value="true"/>
     <node name="launch_controller" pkg="sentry_simulation" type="launch_controller.py" output="screen"/>
 </launch>
