@@ -84,8 +84,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 1.3237965106964111
-        Min Value: -0.5622207522392273
+        Max Value: 2.0450944900512695
+        Min Value: -0.497167706489563
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -144,13 +144,13 @@ Visualization Manager:
       Value: true
     - Alpha: 1
       Class: rviz/Axes
-      Enabled: true
+      Enabled: false
       Length: 1
       Name: Axes
       Radius: 0.10000000149011612
       Reference Frame: <Fixed Frame>
       Show Trail: false
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -248,13 +248,13 @@ Visualization Manager:
       Value: false
     - Alpha: 1
       Class: rviz/Axes
-      Enabled: true
+      Enabled: false
       Length: 1
       Name: Axes
       Radius: 0.10000000149011612
       Reference Frame: odom
       Show Trail: false
-      Value: true
+      Value: false
     - Alpha: 1
       Class: rviz/GridCells
       Color: 239; 41; 41

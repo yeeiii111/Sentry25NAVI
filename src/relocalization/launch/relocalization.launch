@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <launch>
     <node name="relocalization" pkg="relocalization" type="relocalization" output="screen" >
-        <param name="pcd_path" value="/home/tjurm/navi_ws/Sentry25NAVI/src/Point-LIO-master/PCD/505_1.pcd"/>
-        <param name="obs_path" value="/home/tjurm/navi_ws/Sentry25NAVI/src/Point-LIO-master/PCD/505obs_1.pcd"/>
+        <param name="pcd_path" value="/home/tjurm/navi_ws/Sentry25NAVI/src/Point-LIO-master/PCD/scans1.pcd"/>
+        <param name="obs_path" value="/home/tjurm/navi_ws/Sentry25NAVI/src/Point-LIO-master/PCD/obstacle_filter.pcd"/>
         <param name="leaf_size" value="0.2"/>
         <param name="map_leaf_size" value="0.2"/>
         <param name="max_dist_sq" value="2.0"/>

@@ -124,14 +124,14 @@ void Controller::Plan(const ros::TimerEvent& event){
         else x_forward = true;
 
         double error = YawErrorCal(robot_pose,prune_opt_path.poses[index],x_forward);
-        if(((abs(error) > M_PI/2) || ((abs(error) > M_PI/3) && narrow) || turn_state) 
+        if(((abs(error) > M_PI/2) || ((abs(error) > M_PI/5) && narrow) || turn_state) 
             && EuclideanDistance > 1.0)
         {
             if(abs(error) < M_PI/6 && (!narrow)){
                 turn_state = false;
                 return;
             }
-            else if(abs(error) < M_PI/6 && (narrow)){
+            else if(abs(error) < M_PI/18 && (narrow)){
                 turn_state = false;
                 return;
             }
@@ -224,7 +224,7 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
             prune_path.poses.swap(tem_prune_path);
         }
         prune_path_pub.publish(prune_path);
-        int obs_count = Passbility_check(costmap, prune_path, search_radius, obstacle_result, short_forsee_index);
+        int obs_count = Passbility_check(costmap, prune_path, search_radius, obstacle_result, static_cast<int>(prune_path.poses.size()));
         if(obs_count > narrow_threshold)
         {
             narrow = true;
@@ -244,18 +244,20 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
             double ratio;
             double x = static_cast<double>(size/2 - abs(size/2 - (count + prune_index)));
             ratio = 1 - exp(-x * 0.08);
-            if(optimizer_.optimize(obstacle_result, pose, pose_opt, ratio) && 
-            ( (!narrow && hole_mode) || !hole_mode ))
-            // 狭窄环境下不优化路径，容易出现锯齿
-                {
+            if((!narrow && hole_mode) || !hole_mode )//狭窄环境下不优化路径，耗时太长
+            {
+                if(optimizer_.optimize(obstacle_result, pose, pose_opt, ratio))
                     tem_opt_path.push_back(pose_opt);
-                }
-            else 
+                else
                 {
-                    tem_opt_path.push_back(pose);
-                    //std::cout << "optimize failed!!!" ;
+                   tem_opt_path.push_back(pose); 
+                   std::cout << " optimize failed!" << std::endl;
                 }
+            }
+            else
+                tem_opt_path.push_back(pose); 
             count ++;
+            if (count > short_forsee_index) break; // 优化路径过长会导致耗时长
         }
         //std::cout << "before_local_path_size = " << opt_path.poses.size() << std::endl;
         for(int i = 0; i < static_cast<int>(tem_opt_path.size()) - 1; i++)
