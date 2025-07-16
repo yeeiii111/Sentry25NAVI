@@ -1,4 +1,32 @@
 <launch>
     <node pkg="tracking" type="serial" name="serial" output="screen" respawn="true" respawn_delay="10">
+        <param name="stuck_time_threshold" type="double" value="12.0" />
+        <param name="stuck_distance_threshold" type="double" value="0.1" />
+        <param name="loop_rate" type="int" value="500" />
+        <param name="goal_publish_timeout" type="double" value="15.0" />
+        <param name="team_color" type="string" value="red" />
+        <param name="goal_num" type="int" value="11" />
+        <param name="hole_mode" type="bool" value="true" />
+        <!-- xyz qx qy qz qw -->
+        <param name="red_goal0" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]"/>
+        <param name="red_goal1" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]"/>
+        <param name="red_goal2" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]"/>
+        <param name="red_goal3" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]"/>
+        <param name="red_goal4" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]"/>
+        <param name="red_goal5" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]"/>
+        <param name="red_goal6" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]"/>
+        <param name="red_goal7" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]"/>
+        <param name="red_goal8" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]"/>
+
+        <param name="blue_goal0" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]"/>
+        <param name="blue_goal1" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]"/>
+        <param name="blue_goal2" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]"/>
+        <param name="blue_goal3" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]"/>
+        <param name="blue_goal4" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]"/>
+        <param name="blue_goal5" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]"/>
+        <param name="blue_goal6" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]"/>
+        <param name="blue_goal7" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]"/>
+        <param name="blue_goal8" value="[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]"/>
+
     </node>
 </launch>

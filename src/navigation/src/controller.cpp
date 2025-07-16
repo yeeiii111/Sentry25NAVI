@@ -217,7 +217,11 @@ void Controller::PathOptimaze(const ros::TimerEvent& event)
                     tem_prune_path.push_back(global_path.poses[j]);
                     j++;
                 }
-            else continue;
+            else 
+            {
+                j++;
+                continue;
+            }
         }
         {
             std::lock_guard<std::mutex> lock(prunepath_mutex);
@@ -305,7 +309,13 @@ double Controller::YawErrorCal(const geometry_msgs::PoseStamped& robot_pose,
     if(x_forward)
         path_attitude = atan2(dy, dx);
     else 
-        path_attitude = atan2(dy, dx) - M_PI_2;
+    {
+        double tem1, tem2;
+        tem1 = atan2(dy, dx) - M_PI_2;
+        tem2 = atan2(dy, dx) + M_PI_2;
+        if(abs(anglelimit(tem1 - robot_attitude)) - abs(anglelimit(tem2 - robot_attitude)) > 0.7f) path_attitude = tem2;
+        else path_attitude = tem1;
+    }
     if(std::isnan(path_attitude))
     {
         ROS_ERROR("path_attitude NAN");

@@ -2,7 +2,7 @@
 <launch>
     <param name="/use_sim_time" value="false" />
 
-    <node name="map_server" pkg="map_server" type="map_server" args="$(find navigation)/map/map711.yaml" >
+    <node name="map_server" pkg="map_server" type="map_server" args="$(find navigation)/map/505_1.yaml" >
         <param name="frame_id" value="map" />
     </node>
     <!-- <node name="costmap_clean" pkg="navigation" type="costmap_clean"/> -->

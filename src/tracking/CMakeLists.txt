@@ -15,6 +15,9 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   serial
+  geometry_msgs
+  tf2_ros
+  costmap_prohibition_layer
 )
 
 ## System dependencies are found with CMake's conventions
